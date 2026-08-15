@@ -1,0 +1,6 @@
+{
+  "name": "SKALA - Spatial Presence",
+  "description": "An ambient spatial presence environment with organic living orbs, non-verbal emotional signals, and shared tactile languages.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

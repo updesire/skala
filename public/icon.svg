@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Background Gradient -->
+    <radialGradient id="bgGrad" cx="50%" cy="30%" r="85%">
+      <stop offset="0%" stop-color="#151926" />
+      <stop offset="50%" stop-color="#0d1017" />
+      <stop offset="100%" stop-color="#06070a" />
+    </radialGradient>
+
+    <!-- Outer Ambient Glow -->
+    <radialGradient id="ambientGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.35" />
+      <stop offset="40%" stop-color="#818cf8" stop-opacity="0.2" />
+      <stop offset="70%" stop-color="#c084fc" stop-opacity="0.08" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Orb Inner Light Core -->
+    <radialGradient id="orbCore" cx="36%" cy="34%" r="65%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="25%" stop-color="#7dd3fc" />
+      <stop offset="60%" stop-color="#0284c7" />
+      <stop offset="85%" stop-color="#4338ca" />
+      <stop offset="100%" stop-color="#1e1b4b" />
+    </radialGradient>
+
+    <!-- Wave Crest Stroke Gradients -->
+    <linearGradient id="waveGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="50%" stop-color="#a855f7" />
+      <stop offset="100%" stop-color="#ec4899" />
+    </linearGradient>
+
+    <linearGradient id="goldAccent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#fbbf24" />
+      <stop offset="100%" stop-color="#f59e0b" />
+    </linearGradient>
+
+    <!-- Glow Filters -->
+    <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="14" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+
+    <filter id="intenseGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="22" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Base App Rounded Container -->
+  <rect width="512" height="512" rx="120" fill="url(#bgGrad)" />
+  <rect width="508" height="508" x="2" y="2" rx="118" fill="none" stroke="rgba(255, 255, 255, 0.08)" stroke-width="2" />
+
+  <!-- Ambient Light Flood -->
+  <circle cx="256" cy="240" r="190" fill="url(#ambientGlow)" filter="url(#intenseGlow)" />
+
+  <!-- Harmonic Geometric Orbits / Resonance Waves -->
+  <!-- Outer Orbit with dashed precision dots -->
+  <circle cx="256" cy="240" r="175" fill="none" stroke="#38bdf8" stroke-width="1.5" stroke-opacity="0.2" stroke-dasharray="4 8" />
+  
+  <!-- Elliptical Tilted Orbit Rings (Representing Spatial Frequency) -->
+  <ellipse cx="256" cy="240" rx="150" ry="85" fill="none" stroke="url(#waveGrad1)" stroke-width="2" stroke-opacity="0.45" transform="rotate(-28 256 240)" />
+  <ellipse cx="256" cy="240" rx="150" ry="85" fill="none" stroke="#38bdf8" stroke-width="1.2" stroke-opacity="0.3" transform="rotate(35 256 240)" />
+
+  <!-- Orbital Node Satellites (Presence Dots) -->
+  <circle cx="130" cy="180" r="5.5" fill="#38bdf8" filter="url(#softGlow)" />
+  <circle cx="375" cy="285" r="4.5" fill="#ec4899" filter="url(#softGlow)" />
+  <circle cx="210" cy="360" r="4" fill="#fbbf24" filter="url(#softGlow)" />
+  <circle cx="340" cy="140" r="3.5" fill="#a855f7" filter="url(#softGlow)" />
+
+  <!-- Wave Harmonic Ribbons (Undulating Frequency Lines) -->
+  <path d="M 90 240 C 140 210, 180 270, 256 240 C 320 210, 370 270, 422 240" fill="none" stroke="#38bdf8" stroke-width="3" stroke-linecap="round" stroke-opacity="0.75" filter="url(#softGlow)" />
+  <path d="M 120 255 C 165 285, 205 225, 256 255 C 307 285, 347 225, 392 255" fill="none" stroke="#ec4899" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.6" />
+
+  <!-- Central Living Core Orb with Multi-Layer Glow -->
+  <circle cx="256" cy="240" r="68" fill="url(#orbCore)" filter="url(#softGlow)" />
+  <circle cx="256" cy="240" r="68" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-opacity="0.6" />
+
+  <!-- Ethereal Crescent Specular Highlights -->
+  <ellipse cx="236" cy="216" rx="26" ry="15" fill="#ffffff" fill-opacity="0.75" transform="rotate(-30 236 216)" />
+  <circle cx="276" cy="256" r="6" fill="#ffffff" fill-opacity="0.4" />
+
+  <!-- Modern Luxury Brand Mark: SKALA -->
+  <g transform="translate(0, 420)">
+    <!-- Elegant Horizontal Accent Line -->
+    <line x1="160" y1="0" x2="352" y2="0" stroke="url(#goldAccent)" stroke-width="1.5" stroke-opacity="0.7" />
+    <circle cx="256" cy="0" r="3" fill="#fbbf24" />
+
+    <!-- SKALA Typography -->
+    <text x="256" y="32" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="24" font-weight="700" letter-spacing="10" fill="#f8fafc" text-anchor="middle">
+      SKALA
+    </text>
+    <text x="256" y="48" font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="9" font-weight="400" letter-spacing="4" fill="#94a3b8" text-anchor="middle">
+      SPATIAL PRESENCE
+    </text>
+  </g>
+</svg>
