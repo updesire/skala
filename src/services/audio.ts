@@ -360,6 +360,203 @@ class AmbientAudioEngine {
       osc.stop(now + 0.45);
     } catch {}
   }
+
+  // ==========================================
+  // 1. SYNCHRONOUS CO-TOUCH CONTINUOUS CHORD ENGINE
+  // ==========================================
+  private coTouchGain: GainNode | null = null;
+  private coTouchFilter: BiquadFilterNode | null = null;
+  private coTouchOscillators: OscillatorNode[] = [];
+  private coTouchIsActive = false;
+
+  /**
+   * Starts a continuous, organic binaural chord while 2 users hold/touch together in real-time
+   */
+  public startCoTouchResonance(distanceNormalized = 0.5) {
+    if (!this.isEnabled) return;
+    this.initContext();
+    if (!this.ctx || !this.masterGain) return;
+    if (this.coTouchIsActive) return;
+
+    try {
+      this.coTouchIsActive = true;
+      const now = this.ctx.currentTime;
+
+      this.coTouchGain = this.ctx.createGain();
+      this.coTouchGain.gain.setValueAtTime(0.0001, now);
+      this.coTouchGain.gain.exponentialRampToValueAtTime(0.09, now + 0.8);
+
+      this.coTouchFilter = this.ctx.createBiquadFilter();
+      this.coTouchFilter.type = 'lowpass';
+      this.coTouchFilter.frequency.setValueAtTime(320 + (1 - distanceNormalized) * 280, now);
+
+      this.coTouchGain.connect(this.coTouchFilter);
+      this.coTouchFilter.connect(this.masterGain);
+
+      // Warm celestial pentatonic chord based on 432Hz: A2 (216Hz), E3 (324Hz), A3 (432Hz), C#4 (540Hz)
+      const freqs = [216, 324, 432, 540];
+      this.coTouchOscillators = [];
+
+      freqs.forEach((baseFreq, idx) => {
+        if (!this.ctx || !this.coTouchGain) return;
+        const osc = this.ctx.createOscillator();
+        osc.type = idx % 2 === 0 ? 'sine' : 'triangle';
+        osc.frequency.setValueAtTime(baseFreq + (idx * 0.5), now);
+
+        // Subtle undulating shimmer
+        const lfo = this.ctx.createOscillator();
+        const lfoGain = this.ctx.createGain();
+        lfo.frequency.setValueAtTime(0.4 + idx * 0.15, now);
+        lfoGain.gain.setValueAtTime(1.5, now);
+        lfo.connect(lfoGain);
+        lfoGain.connect(osc.frequency);
+        lfo.start(now);
+
+        osc.connect(this.coTouchGain);
+        osc.start(now);
+        this.coTouchOscillators.push(osc);
+      });
+    } catch {}
+  }
+
+  /**
+   * Modulates continuous Co-Touch audio parameters dynamically as touch coordinates change
+   */
+  public updateCoTouchResonance(distanceNormalized = 0.5, harmonyScore = 0.8) {
+    if (!this.ctx || !this.coTouchGain || !this.coTouchFilter || !this.coTouchIsActive) return;
+    try {
+      const now = this.ctx.currentTime;
+      const targetVol = Math.max(0.02, Math.min(0.12, 0.05 + harmonyScore * 0.06));
+      this.coTouchGain.gain.setTargetAtTime(targetVol, now, 0.2);
+
+      const targetFreq = 260 + (1 - Math.min(1, distanceNormalized)) * 420;
+      this.coTouchFilter.frequency.setTargetAtTime(targetFreq, now, 0.3);
+    } catch {}
+  }
+
+  /**
+   * Stops continuous Co-Touch and plays a crystalline harmonic release chime
+   */
+  public stopCoTouchResonance() {
+    if (!this.coTouchIsActive) return;
+    this.coTouchIsActive = false;
+
+    if (this.ctx && this.coTouchGain) {
+      try {
+        const now = this.ctx.currentTime;
+        this.coTouchGain.gain.setTargetAtTime(0.0001, now, 0.35);
+
+        setTimeout(() => {
+          this.coTouchOscillators.forEach((osc) => {
+            try {
+              osc.stop();
+              osc.disconnect();
+            } catch {}
+          });
+          this.coTouchOscillators = [];
+          if (this.coTouchGain) {
+            this.coTouchGain.disconnect();
+            this.coTouchGain = null;
+          }
+          if (this.coTouchFilter) {
+            this.coTouchFilter.disconnect();
+            this.coTouchFilter = null;
+          }
+        }, 500);
+
+        // Resolution twinkle chime on release
+        this.playSignalResonance(0.5, 1.2, 'starlit_flicker');
+      } catch {}
+    }
+  }
+
+  // ==========================================
+  // 2. CUSTOM SENSORY TAP LOOPS AUDIO SYNTHESIZER
+  // ==========================================
+
+  // Harmonic pentatonic pitch lookup for spatial touch grid
+  private static readonly PENTATONIC_SCALE = [
+    216, // A3
+    243, // B3
+    270, // C#4
+    324, // E4
+    364, // F#4
+    432, // A4
+    486, // B4
+    540, // C#5
+    648, // E5
+    728, // F#5
+    864, // A5
+  ];
+
+  /**
+   * Plays an organic tactile marimba/bell acoustic strike for an individual tap point
+   */
+  public playTapPointSound(intensity = 0.6, xNorm = 0.5, yNorm = 0.5, freqOverride?: number) {
+    if (!this.isEnabled) return;
+    this.initContext();
+    if (!this.ctx || !this.masterGain) return;
+
+    try {
+      const now = this.ctx.currentTime;
+      let pitch: number;
+
+      if (freqOverride) {
+        pitch = freqOverride;
+      } else {
+        // Derive pitch musically from 2D coordinates on the sensory pad
+        const scale = AmbientAudioEngine.PENTATONIC_SCALE;
+        const scaleIndex = Math.min(
+          scale.length - 1,
+          Math.max(0, Math.floor((xNorm * 0.6 + (1 - yNorm) * 0.4) * scale.length))
+        );
+        pitch = scale[scaleIndex];
+      }
+
+      const vol = Math.max(0.03, Math.min(0.22, 0.08 * (intensity || 0.6)));
+
+      // Fundamental Bell Strike
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const filter = this.ctx.createBiquadFilter();
+
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(pitch * 2.8, now);
+      filter.frequency.exponentialRampToValueAtTime(pitch * 0.8, now + 0.35);
+
+      osc.type = intensity > 0.7 ? 'triangle' : 'sine';
+      osc.frequency.setValueAtTime(pitch, now);
+      osc.frequency.exponentialRampToValueAtTime(pitch * 0.98, now + 0.3);
+
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.linearRampToValueAtTime(vol, now + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.00001, now + 0.45);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.masterGain);
+
+      osc.start(now);
+      osc.stop(now + 0.5);
+
+      // Subtle Harmonic Shimmer (Crystal overtone)
+      const oscHarmonic = this.ctx.createOscillator();
+      const gainHarmonic = this.ctx.createGain();
+
+      oscHarmonic.type = 'sine';
+      oscHarmonic.frequency.setValueAtTime(pitch * 2.0, now);
+
+      gainHarmonic.gain.setValueAtTime(0.0001, now);
+      gainHarmonic.gain.linearRampToValueAtTime(vol * 0.4, now + 0.01);
+      gainHarmonic.gain.exponentialRampToValueAtTime(0.00001, now + 0.25);
+
+      oscHarmonic.connect(gainHarmonic);
+      gainHarmonic.connect(this.masterGain);
+
+      oscHarmonic.start(now);
+      oscHarmonic.stop(now + 0.3);
+    } catch {}
+  }
 }
 
 export const ambientAudio = new AmbientAudioEngine();

@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Person, UserIdentity, WaveShape, SharedLanguageItem, SignalData } from '../types';
+import { Person, UserIdentity, WaveShape, SharedLanguageItem, SignalData, CustomTapLoop } from '../types';
 import { LivingOrb } from './LivingOrb';
 import { WaveSignatureVisualizer } from './WaveSignatureVisualizer';
 import { ambientAudio } from '../services/audio';
 import { useLanguage } from '../context/LanguageContext';
+import { Music, Sparkles } from 'lucide-react';
 
 interface SignalComposerProps {
   recipient: Person;
   user: UserIdentity;
   sharedLanguages: SharedLanguageItem[];
+  savedTapLoops?: CustomTapLoop[];
+  onOpenTapStudio?: () => void;
   onSendSignal: (signal: SignalData) => void;
   onCancel: () => void;
 }
@@ -27,6 +30,8 @@ export const SignalComposer: React.FC<SignalComposerProps> = ({
   recipient,
   user,
   sharedLanguages,
+  savedTapLoops = [],
+  onOpenTapStudio,
   onSendSignal,
   onCancel,
 }) => {
@@ -36,6 +41,7 @@ export const SignalComposer: React.FC<SignalComposerProps> = ({
   const [rhythmSpeed, setRhythmSpeed] = useState<number>(1.0);
   const [selectedMeaning, setSelectedMeaning] = useState<string>('');
   const [customMeaning, setCustomMeaning] = useState<string>('');
+  const [selectedTapLoop, setSelectedTapLoop] = useState<CustomTapLoop | null>(null);
   const [isSending, setIsSending] = useState<boolean>(false);
 
   const waveTypes: WaveShape[] = [
@@ -77,7 +83,7 @@ export const SignalComposer: React.FC<SignalComposerProps> = ({
     if (isSending) return;
     setIsSending(true);
 
-    const meaning = customMeaning.trim() || selectedMeaning || undefined;
+    const meaning = customMeaning.trim() || selectedMeaning || (selectedTapLoop ? selectedTapLoop.name : undefined);
 
     const newSignal: SignalData = {
       id: `sig-${Date.now()}`,
@@ -86,9 +92,10 @@ export const SignalComposer: React.FC<SignalComposerProps> = ({
       waveShape,
       intensity,
       rhythmSpeed,
-      duration: 3.5,
+      duration: selectedTapLoop ? (selectedTapLoop.totalDuration / 1000) : 3.5,
       color: recipient.color,
       sharedMeaning: meaning,
+      customTapLoop: selectedTapLoop || undefined,
       createdAt: Date.now(),
     };
 
@@ -298,6 +305,57 @@ export const SignalComposer: React.FC<SignalComposerProps> = ({
             </div>
           </div>
         )}
+
+        {/* Sensory Tap Loop Attachment (Idea 5) */}
+        <div className="flex flex-col gap-1.5 pt-1 border-t border-white/5">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] uppercase tracking-widest text-zinc-500 flex items-center gap-1">
+              <Music className="w-3 h-3 text-cyan-400" />
+              <span>{t.tapLoopsTitle}</span>
+            </span>
+            {onOpenTapStudio && (
+              <button
+                type="button"
+                id="btn-open-tap-studio-from-composer"
+                onClick={onOpenTapStudio}
+                className="text-[10px] text-cyan-400 hover:text-cyan-300 transition-colors flex items-center gap-1 cursor-pointer"
+              >
+                <span>+ {t.tapStudioBtn}</span>
+              </button>
+            )}
+          </div>
+          {savedTapLoops && savedTapLoops.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {savedTapLoops.map((loop) => {
+                const isChosen = selectedTapLoop?.id === loop.id;
+                return (
+                  <button
+                    key={loop.id}
+                    type="button"
+                    id={`btn-choose-loop-${loop.id}`}
+                    onClick={() => {
+                      if (isChosen) {
+                        setSelectedTapLoop(null);
+                      } else {
+                        setSelectedTapLoop(loop);
+                        // Play a brief sample
+                        ambientAudio.playTapPointSound(0.8, 0.5, 0.5, loop.taps[0]?.pitchFreq || 432);
+                      }
+                    }}
+                    className={`px-2.5 py-1 rounded-xl text-[11px] transition-all border flex items-center gap-1.5 cursor-pointer ${
+                      isChosen
+                        ? 'border-cyan-400/60 bg-cyan-950/40 text-cyan-200 font-medium ring-1 ring-cyan-400/30'
+                        : 'border-white/10 bg-white/5 text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    <Music className="w-2.5 h-2.5" />
+                    <span>{loop.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         {/* Freeform intimate intention (optional) */}
         <div className="flex flex-col gap-1">

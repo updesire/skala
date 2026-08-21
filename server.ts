@@ -26,6 +26,29 @@ interface Participant {
   distance?: number;
 }
 
+interface TapPoint {
+  id?: string;
+  time: number;
+  x: number;
+  y: number;
+  intensity: number;
+  pitchFreq?: number;
+}
+
+interface CustomTapLoop {
+  id: string;
+  name: string;
+  description?: string;
+  taps: TapPoint[];
+  totalDuration: number;
+  color?: any;
+  tempoSpeed?: number;
+  createdAt: number;
+  authorName: string;
+  authorId?: string;
+  targetPersonId?: string;
+}
+
 interface SignalEvent {
   id: string;
   senderId: string;
@@ -37,6 +60,7 @@ interface SignalEvent {
   color: string;
   privateIntention?: string;
   symbolMeaning?: string;
+  customTapLoop?: CustomTapLoop;
   timestamp: number;
 }
 
@@ -715,7 +739,93 @@ app.post("/api/push/test", async (req: Request, res: Response) => {
   }
 });
 
-// 8. Server-Sent Events (SSE) for instant live streaming
+// 8. Synchronous Co-Touch Real-Time Bridge Synchronization
+interface ActiveTouchInfo {
+  userId: string;
+  userName: string;
+  userColor: any;
+  targetPersonId?: string;
+  x: number;
+  y: number;
+  intensity: number;
+  updatedAt: number;
+}
+const activeCoTouches = new Map<string, Map<string, ActiveTouchInfo>>();
+
+app.post("/api/spaces/:spaceId/co-touch", (req: Request, res: Response) => {
+  const { spaceId } = req.params;
+  const { action, touch } = req.body; // action: 'start' | 'move' | 'end'
+
+  if (!spaceId || !touch || !touch.userId) {
+    return res.status(400).json({ error: "Invalid touch payload" });
+  }
+
+  if (!activeCoTouches.has(spaceId)) {
+    activeCoTouches.set(spaceId, new Map());
+  }
+
+  const spaceTouches = activeCoTouches.get(spaceId)!;
+
+  if (action === "end") {
+    spaceTouches.delete(touch.userId);
+  } else {
+    spaceTouches.set(touch.userId, {
+      ...touch,
+      updatedAt: Date.now(),
+    });
+  }
+
+  // Check if multiple users are touching simultaneously in this space
+  const activeList = Array.from(spaceTouches.values()).filter(
+    (t) => Date.now() - t.updatedAt < 2500
+  );
+
+  broadcastToSpace(spaceId, "CO_TOUCH_EVENT", {
+    action,
+    touch,
+    activeTouches: activeList,
+  });
+
+  res.json({ success: true, activeCount: activeList.length });
+});
+
+// 9. Custom Sensory Tap Loops Storage & Retrieval
+const sharedTapLoops = new Map<string, CustomTapLoop[]>();
+
+app.get("/api/spaces/:spaceId/tap-loops", (req: Request, res: Response) => {
+  const { spaceId } = req.params;
+  const loops = sharedTapLoops.get(spaceId) || [];
+  res.json({ success: true, loops });
+});
+
+app.post("/api/spaces/:spaceId/tap-loops", (req: Request, res: Response) => {
+  const { spaceId } = req.params;
+  const { tapLoop } = req.body;
+
+  if (!tapLoop || !tapLoop.name || !Array.isArray(tapLoop.taps)) {
+    return res.status(400).json({ error: "Invalid tap loop data" });
+  }
+
+  if (!sharedTapLoops.has(spaceId)) {
+    sharedTapLoops.set(spaceId, []);
+  }
+
+  const list = sharedTapLoops.get(spaceId)!;
+  const newLoop: CustomTapLoop = {
+    ...tapLoop,
+    id: tapLoop.id || `loop-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    createdAt: Date.now(),
+  };
+
+  list.unshift(newLoop);
+  if (list.length > 40) list.pop();
+
+  broadcastToSpace(spaceId, "TAP_LOOP_SAVED", { tapLoop: newLoop });
+
+  res.json({ success: true, tapLoop: newLoop });
+});
+
+// 10. Server-Sent Events (SSE) for instant live streaming
 app.get("/api/spaces/:spaceId/events", (req: Request, res: Response) => {
   const { spaceId } = req.params;
   const userId = (req.query.userId as string) || "anonymous";

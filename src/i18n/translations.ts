@@ -174,6 +174,36 @@ export interface Translations {
   restoreBots: string;
   connectedRealUsers: string;
   liveSyncStatus: string;
+
+  // Idea 3: Synchronous Co-Touch Canvas
+  coTouchTitle: string;
+  coTouchActive: string;
+  coTouchHolding: string;
+  coTouchResonanceDesc: string;
+  coTouchConnectedWith: string;
+  coTouchInstruction: string;
+  coTouchHarmonyScore: string;
+
+  // Idea 5: Custom Sensory Tap Loops
+  tapLoopsTitle: string;
+  tapLoopsSubtitle: string;
+  tapStudioBtn: string;
+  recordTapLoop: string;
+  recordingTapLoop: string;
+  tapPadInstruction: string;
+  tapLoopNameLabel: string;
+  tapLoopNamePlaceholder: string;
+  saveTapLoopBtn: string;
+  playTapLoopBtn: string;
+  sendTapLoopBtn: string;
+  savedTapLoops: string;
+  noTapLoopsYet: string;
+  loopPresets: string;
+  tapLoopSentSuccess: string;
+  tapLoopPlaying: string;
+  tapPointsCount: string;
+  tempoMultiplier: string;
+  clearRecording: string;
 }
 
 export const translations: Record<Language, Translations> = {
@@ -344,6 +374,36 @@ export const translations: Record<Language, Translations> = {
     restoreBots: 'مشاهده همراهان نمونه',
     connectedRealUsers: 'همراهان آنلاین در این فضا',
     liveSyncStatus: 'متصل به سرور زنده',
+
+    // Idea 3: Synchronous Co-Touch Canvas
+    coTouchTitle: 'لمس مشترک همزمان',
+    coTouchActive: 'رزونانس لمس همزمان برقرار است',
+    coTouchHolding: 'نگه‌داشتن لمس روی گوی',
+    coTouchResonanceDesc: 'وقتی دو نفر همزمان گوی‌های یکدیگر را لمس می‌کنند، پلی از نور زنده و ارتعاش صوتی پیوسته شکل می‌گیرد.',
+    coTouchConnectedWith: 'در تماس ارتعاشی زنده با',
+    coTouchInstruction: 'انگشت خود را روی گوی نگه دارید و از همراهتان بخواهید همزمان گوی شما را لمس کند...',
+    coTouchHarmonyScore: 'میزان هماهنگی ارتعاشی',
+
+    // Idea 5: Custom Sensory Tap Loops
+    tapLoopsTitle: 'کتابچه ریتم‌های حسی و تپ اختصاصی',
+    tapLoopsSubtitle: 'ضبط، ذخیره و ارسال ریتم‌های لمسی اختصاصی به‌عنوان زبان احساسی',
+    tapStudioBtn: 'استودیوی تپ حسی',
+    recordTapLoop: 'شروع ضبط ریتم',
+    recordingTapLoop: 'در حال ضبط ضرب‌آهنگ شما...',
+    tapPadInstruction: 'روی پد لمسی با انگشتان خود ریتم بنوازید (ضربه در نقاط مختلف، فرکانس‌های دلنشین متفاوتی ایجاد می‌کند)',
+    tapLoopNameLabel: 'نام ریتم حسی',
+    tapLoopNamePlaceholder: 'مثلاً: ضربان قلب آرام، سه‌ضربه شبانه، کد دلتنگی...',
+    saveTapLoopBtn: 'ذخیره در کتابخانه ریتم‌ها',
+    playTapLoopBtn: 'پیش‌نمایش پخش ریتم',
+    sendTapLoopBtn: 'ارسال این ریتم به همراه',
+    savedTapLoops: 'ریتم‌های ضبط‌شده من',
+    noTapLoopsYet: 'هنوز هیچ ریتم اختصاصی ضبط نشده است. روی دکمه ضبط بزنید و الگوی لمسی خود را خلق کنید.',
+    loopPresets: 'ریتم‌های پیش‌فرض کیهانی',
+    tapLoopSentSuccess: 'ریتم لمسی با موفقیت در فضا طنین‌انداز شد ✨',
+    tapLoopPlaying: 'در حال طنین‌اندازی ریتم لمسی اختصاصی...',
+    tapPointsCount: 'ضربه ضبط‌شده',
+    tempoMultiplier: 'سرعت پخش',
+    clearRecording: 'پاک کردن و ضبط مجدد',
   },
   en: {
     appName: 'SKALA',
@@ -512,5 +572,35 @@ export const translations: Record<Language, Translations> = {
     restoreBots: 'Show Sample Companions',
     connectedRealUsers: 'Real Companions Online',
     liveSyncStatus: 'Live Real-Time Synced',
+
+    // Idea 3: Synchronous Co-Touch Canvas
+    coTouchTitle: 'Synchronous Co-Touch',
+    coTouchActive: 'Live Co-Touch Resonance Active',
+    coTouchHolding: 'Holding touch on orb',
+    coTouchResonanceDesc: 'When two people touch each other\'s orbs simultaneously, a living bridge of light and continuous acoustic harmonic resonance connects them.',
+    coTouchConnectedWith: 'In live harmonic resonance with',
+    coTouchInstruction: 'Hold your touch on their orb and invite them to touch your orb simultaneously...',
+    coTouchHarmonyScore: 'Harmonic Alignment',
+
+    // Idea 5: Custom Sensory Tap Loops
+    tapLoopsTitle: 'Custom Sensory Tap Loops',
+    tapLoopsSubtitle: 'Record, compose, and send custom tactile rhythm languages',
+    tapStudioBtn: 'Sensory Tap Studio',
+    recordTapLoop: 'Start Recording Rhythm',
+    recordingTapLoop: 'Recording your sensory rhythm...',
+    tapPadInstruction: 'Tap on the tactile surface with your fingers (different coordinates generate harmonious musical pitches)',
+    tapLoopNameLabel: 'Sensory Rhythm Name',
+    tapLoopNamePlaceholder: 'e.g. Calm Heartbeat, Starlit Triplets, Presence Code...',
+    saveTapLoopBtn: 'Save to Tap Loops Codex',
+    playTapLoopBtn: 'Preview Sensory Loop',
+    sendTapLoopBtn: 'Transmit Rhythm Across Space',
+    savedTapLoops: 'My Recorded Loops',
+    noTapLoopsYet: 'No custom tap loops recorded yet. Tap start recording to craft your first tactile pattern.',
+    loopPresets: 'Celestial Loop Presets',
+    tapLoopSentSuccess: 'Sensory tap loop resonated across space ✨',
+    tapLoopPlaying: 'Resonating custom tactile tap loop...',
+    tapPointsCount: 'Taps Recorded',
+    tempoMultiplier: 'Playback Speed',
+    clearRecording: 'Clear & Re-record',
   },
 };

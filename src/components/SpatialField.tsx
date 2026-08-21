@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Person, UserIdentity, TouchRipple, TravelingSignal } from '../types';
+import { Person, UserIdentity, TouchRipple, TravelingSignal, CoTouchState } from '../types';
 import { LivingOrb } from './LivingOrb';
+import { CoTouchResonanceHUD } from './CoTouchResonanceHUD';
 import { ambientAudio } from '../services/audio';
 import { useLanguage } from '../context/LanguageContext';
-import { UserPlus, Share2, Sparkles, RefreshCw } from 'lucide-react';
+import { UserPlus, Share2, Sparkles, RefreshCw, Music, Zap } from 'lucide-react';
 
 interface SpatialFieldProps {
   people: Person[];
@@ -23,6 +24,12 @@ interface SpatialFieldProps {
   onTriggerInstantPulse: (person: Person) => void;
   onAddRipple: (ripple: TouchRipple) => void;
   showAccessibilityLabels?: boolean;
+  onOpenTapStudio?: (person?: Person | null) => void;
+  isCoTouchActive?: boolean;
+  coTouchPartnerName?: string;
+  coTouchPartnerColor?: string;
+  coTouchHarmonyScore?: number;
+  onSendCoTouch?: (action: 'start' | 'move' | 'end', touch: CoTouchState) => void;
 }
 
 interface BackgroundMote {
@@ -51,6 +58,12 @@ export const SpatialField: React.FC<SpatialFieldProps> = ({
   onTriggerInstantPulse,
   onAddRipple,
   showAccessibilityLabels = false,
+  onOpenTapStudio,
+  isCoTouchActive = false,
+  coTouchPartnerName = '',
+  coTouchPartnerColor = '#df8a5a',
+  coTouchHarmonyScore = 96,
+  onSendCoTouch,
 }) => {
   const { t, isRtl } = useLanguage();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -217,15 +230,15 @@ export const SpatialField: React.FC<SpatialFieldProps> = ({
         ctx.fill();
       });
 
-      // 2. Harmonic Resonance Filaments between User and Selected / Active People
+      // 2. Harmonic Resonance Filaments & Co-Touch Living Bridges
       people.forEach((p) => {
         const isSelected = selectedPersonId === p.id;
+        const isHolding = holdingPersonId === p.id;
         const pos = getPersonPosition(p);
         const distance = Math.hypot(pos.x - userX, pos.y - userY);
 
-        if (isSelected || p.presence === 'reaching') {
-          // Draw fluid wavy harmonic energy beam
-          const segments = 24;
+        if (isCoTouchActive || isHolding || isSelected || p.presence === 'reaching') {
+          const segments = isCoTouchActive || isHolding ? 48 : 24;
           ctx.beginPath();
           ctx.moveTo(userX, userY);
 
@@ -234,30 +247,59 @@ export const SpatialField: React.FC<SpatialFieldProps> = ({
             const baseX = userX + (pos.x - userX) * frac;
             const baseY = userY + (pos.y - userY) * frac;
 
-            // Transverse sinusoidal wave displacement
-            const waveOffset = Math.sin(frac * Math.PI * 4 - time * 3) * (8 * Math.sin(frac * Math.PI));
-            const normalX = -(pos.y - userY) / distance;
-            const normalY = (pos.x - userX) / distance;
+            // Transverse sinusoidal wave displacement + co-touch high-energy oscillation
+            const waveFreq = (isCoTouchActive || isHolding) ? 8 : 4;
+            const waveAmp = (isCoTouchActive || isHolding) ? 14 : 8;
+            const waveOffset = Math.sin(frac * Math.PI * waveFreq - time * (isCoTouchActive ? 6 : 3)) * (waveAmp * Math.sin(frac * Math.PI));
+            const normalX = -(pos.y - userY) / (distance || 1);
+            const normalY = (pos.x - userX) / (distance || 1);
 
             ctx.lineTo(baseX + normalX * waveOffset, baseY + normalY * waveOffset);
           }
 
-          const beamAlpha = isSelected ? 0.35 : 0.2;
-          ctx.strokeStyle = p.color.accent.replace(/[\d.]+\)$/g, `${beamAlpha})`);
-          ctx.lineWidth = isSelected ? 2.0 : 1.2;
-          ctx.stroke();
+          if (isCoTouchActive || isHolding) {
+            // Intense radiant plasma beam
+            ctx.strokeStyle = p.color.accent;
+            ctx.lineWidth = 3.5;
+            ctx.shadowColor = p.color.accent;
+            ctx.shadowBlur = 18;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // Second intertwined harmonic strand
+            ctx.beginPath();
+            ctx.moveTo(userX, userY);
+            for (let s = 1; s <= segments; s++) {
+              const frac = s / segments;
+              const baseX = userX + (pos.x - userX) * frac;
+              const baseY = userY + (pos.y - userY) * frac;
+              const counterWave = Math.cos(frac * Math.PI * 8 + time * 5) * (10 * Math.sin(frac * Math.PI));
+              const normalX = -(pos.y - userY) / (distance || 1);
+              const normalY = (pos.x - userX) / (distance || 1);
+              ctx.lineTo(baseX + normalX * counterWave, baseY + normalY * counterWave);
+            }
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.8;
+            ctx.stroke();
+          } else {
+            const beamAlpha = isSelected ? 0.35 : 0.2;
+            ctx.strokeStyle = p.color.accent.replace(/[\d.]+\)$/g, `${beamAlpha})`);
+            ctx.lineWidth = isSelected ? 2.0 : 1.2;
+            ctx.stroke();
+          }
 
           // Harmonic energy pulse packets traveling along the beam
-          const pulseFrac = (time * 0.8) % 1.0;
+          const pulseFrac = (time * (isCoTouchActive ? 1.6 : 0.8)) % 1.0;
           const px = userX + (pos.x - userX) * pulseFrac;
           const py = userY + (pos.y - userY) * pulseFrac;
-          const pulseGrad = ctx.createRadialGradient(px, py, 0, px, py, 14);
+          const pulseRadius = isCoTouchActive ? 22 : 14;
+          const pulseGrad = ctx.createRadialGradient(px, py, 0, px, py, pulseRadius);
           pulseGrad.addColorStop(0, '#ffffff');
           pulseGrad.addColorStop(0.4, p.color.accent);
           pulseGrad.addColorStop(1, 'transparent');
           ctx.fillStyle = pulseGrad;
           ctx.beginPath();
-          ctx.arc(px, py, 14, 0, Math.PI * 2);
+          ctx.arc(px, py, pulseRadius, 0, Math.PI * 2);
           ctx.fill();
         }
       });
@@ -427,6 +469,19 @@ export const SpatialField: React.FC<SpatialFieldProps> = ({
 
     ambientAudio.playBreathPulse(0.3);
 
+    // Notify Co-Touch start across real-time space
+    if (onSendCoTouch) {
+      onSendCoTouch('start', {
+        userId: user.id || 'user',
+        targetPersonId: person.id,
+        x: (person.x || 0.5),
+        y: (person.y || 0.5),
+        intensity: 0.85,
+        isActive: true,
+        timestamp: Date.now(),
+      });
+    }
+
     const startTime = Date.now();
     const duration = 650; // ms to trigger long press
 
@@ -445,6 +500,17 @@ export const SpatialField: React.FC<SpatialFieldProps> = ({
       // Trigger Signal Composer directly from Orb!
       setHoldingPersonId(null);
       setHoldProgress(0);
+      if (onSendCoTouch) {
+        onSendCoTouch('end', {
+          userId: user.id || 'user',
+          targetPersonId: person.id,
+          x: (person.x || 0.5),
+          y: (person.y || 0.5),
+          intensity: 0,
+          isActive: false,
+          timestamp: Date.now(),
+        });
+      }
       onOpenComposer(person);
     }, duration);
   };
@@ -458,6 +524,18 @@ export const SpatialField: React.FC<SpatialFieldProps> = ({
     if (holdIntervalRef.current) {
       clearInterval(holdIntervalRef.current);
       holdIntervalRef.current = null;
+    }
+
+    if (onSendCoTouch) {
+      onSendCoTouch('end', {
+        userId: user.id || 'user',
+        targetPersonId: person.id,
+        x: (person.x || 0.5),
+        y: (person.y || 0.5),
+        intensity: 0,
+        isActive: false,
+        timestamp: Date.now(),
+      });
     }
 
     // If released before long press, treat as tap selection
@@ -477,6 +555,17 @@ export const SpatialField: React.FC<SpatialFieldProps> = ({
   const handlePointerCancelOrb = () => {
     if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
     if (holdIntervalRef.current) clearInterval(holdIntervalRef.current);
+    if (onSendCoTouch && holdingPersonId) {
+      onSendCoTouch('end', {
+        userId: user.id || 'user',
+        targetPersonId: holdingPersonId,
+        x: 0.5,
+        y: 0.5,
+        intensity: 0,
+        isActive: false,
+        timestamp: Date.now(),
+      });
+    }
     setHoldingPersonId(null);
     setHoldProgress(0);
   };
@@ -663,6 +752,15 @@ export const SpatialField: React.FC<SpatialFieldProps> = ({
         </motion.span>
       </motion.div>
 
+      {/* Co-Touch Resonance HUD Display (Idea 3) */}
+      <CoTouchResonanceHUD
+        isActive={isCoTouchActive}
+        partnerName={coTouchPartnerName || selectedPerson?.name || 'هم‌نوا'}
+        partnerColor={coTouchPartnerColor || selectedPerson?.color.accent || '#df8a5a'}
+        user={user}
+        harmonyScore={coTouchHarmonyScore}
+      />
+
       {/* Spatial Contextual Actions when an Orb is Selected */}
       <AnimatePresence>
         {selectedPerson && (
@@ -707,6 +805,19 @@ export const SpatialField: React.FC<SpatialFieldProps> = ({
               >
                 {t.sendSignal}
               </button>
+
+              {/* Sensory Tap Loop Studio (Idea 5) */}
+              {onOpenTapStudio && (
+                <button
+                  id="btn-action-tap-studio"
+                  onClick={() => onOpenTapStudio(selectedPerson)}
+                  className="px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl sm:rounded-full text-[11px] sm:text-xs text-cyan-300 hover:text-white bg-cyan-950/40 hover:bg-cyan-900/50 border border-cyan-500/30 transition-all cursor-pointer flex items-center gap-1.5"
+                  title={t.tapLoopsTitle}
+                >
+                  <Music className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>{t.tapStudioBtn}</span>
+                </button>
+              )}
 
               {/* Quick Instant Heartbeat / Harmonic Pulse */}
               <button

@@ -29,10 +29,11 @@ import { NotificationSettingsModal } from './components/NotificationSettingsModa
 import { CirclesManagerModal } from './components/CirclesManagerModal';
 import { IncomingSignalOverlay } from './components/IncomingSignalOverlay';
 import { SoundAtmosphereToggle } from './components/SoundAtmosphereToggle';
+import { SensoryTapLoopRecorderModal } from './components/SensoryTapLoopRecorderModal';
 import { ambientAudio } from './services/audio';
 import { spaceSync } from './services/spaceSync';
 import { subscribeToPush, getNotificationPermission } from './services/pushNotification';
-import { History, Radio, UserCheck, Languages, UserPlus, Share2, ShieldCheck, MoreHorizontal, Menu, X, Bell, BellRing, Layers, Crown } from 'lucide-react';
+import { History, Radio, UserCheck, Languages, UserPlus, Share2, ShieldCheck, MoreHorizontal, Menu, X, Bell, BellRing, Layers, Crown, Music } from 'lucide-react';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
 
 function MainAppContent() {
@@ -255,6 +256,31 @@ function MainAppContent() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [showAccessibilityLabels, setShowAccessibilityLabels] = useState<boolean>(false);
 
+  // Idea 3 & 5: Co-Touch Resonance & Custom Tap Loops State
+  const [isCoTouchActive, setIsCoTouchActive] = useState<boolean>(false);
+  const [coTouchPartnerName, setCoTouchPartnerName] = useState<string>('');
+  const [coTouchPartnerColor, setCoTouchPartnerColor] = useState<string>('#df8a5a');
+  const [coTouchHarmonyScore, setCoTouchHarmonyScore] = useState<number>(96);
+
+  const [isTapStudioOpen, setIsTapStudioOpen] = useState<boolean>(false);
+  const [tapStudioTargetPerson, setTapStudioTargetPerson] = useState<Person | null>(null);
+  const [savedTapLoops, setSavedTapLoops] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem('skala_saved_tap_loops');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('skala_saved_tap_loops', JSON.stringify(savedTapLoops));
+    } catch (e) {
+      console.warn('Failed to save tap loops', e);
+    }
+  }, [savedTapLoops]);
+
   // Environmental dynamic effects
   const [ripples, setRipples] = useState<TouchRipple[]>([]);
   const [activeSignals, setActiveSignals] = useState<TravelingSignal[]>([]);
@@ -349,12 +375,49 @@ function MainAppContent() {
         if (sig.senderName !== user.name) {
           handleInboundRealtimeSignal(sig);
         }
+      } else if (event.type === 'CO_TOUCH_EVENT') {
+        const { action, touch } = event.data;
+        if (touch && touch.userId !== (user.id || 'user')) {
+          if (action === 'start' || action === 'move') {
+            const partner = people.find((p) => p.id === touch.userId || p.name === touch.userName);
+            setIsCoTouchActive(true);
+            setCoTouchPartnerName(partner?.name || touch.userName || 'هم‌نوا');
+            setCoTouchPartnerColor(partner?.color?.accent || '#df8a5a');
+            ambientAudio.startCoTouchResonance(touch.intensity || 0.85);
+            if (typeof navigator !== 'undefined' && navigator.vibrate) {
+              navigator.vibrate([30, 40, 30]);
+            }
+          } else if (action === 'end') {
+            setIsCoTouchActive(false);
+            ambientAudio.stopCoTouchResonance();
+          }
+        }
+      } else if (event.type === 'TAP_LOOP_SAVED') {
+        if (event.data?.tapLoop) {
+          setSavedTapLoops((prev) => {
+            const exists = prev.some((l) => l.id === event.data.tapLoop.id);
+            if (exists) return prev;
+            return [event.data.tapLoop, ...prev];
+          });
+        }
       }
     });
+
+    // Also fetch saved tap loops from space
+    spaceSync.fetchTapLoops(spaceId).then((loops) => {
+      if (loops && loops.length > 0) {
+        setSavedTapLoops((prev) => {
+          const ids = new Set(prev.map((l) => l.id));
+          const newOnes = loops.filter((l: any) => !ids.has(l.id));
+          return [...prev, ...newOnes];
+        });
+      }
+    }).catch(() => {});
 
     return () => {
       mounted = false;
       unsubscribe();
+      ambientAudio.stopCoTouchResonance();
     };
   }, [spaceId, user.name, isGuestJoining, isRealPeopleOnly]);
 
@@ -409,6 +472,25 @@ function MainAppContent() {
 
     ambientAudio.playSignalResonance(sig.intensity);
 
+    // Idea 5: Playback rhythmic Tap Loop if attached!
+    if (sig.customTapLoop && Array.isArray(sig.customTapLoop.taps)) {
+      sig.customTapLoop.taps.forEach((tap: any) => {
+        setTimeout(() => {
+          ambientAudio.playTapPointSound(tap.pitchHz || 440, tap.resonance || 0.8, tap.duration || 0.15);
+          addRipple({
+            id: `rip-tap-${Date.now()}-${Math.random()}`,
+            x: sig.targetX + (tap.offsetX || 0),
+            y: sig.targetY + (tap.offsetY || 0),
+            color: sig.color.accent || '#38bdf8',
+            radius: 14,
+            maxRadius: 190,
+            opacity: 0.95,
+            birth: Date.now(),
+          });
+        }, tap.timeOffsetMs || 0);
+      });
+    }
+
     if (sig.recipientName === 'You' || sig.recipientName === 'شما' || sig.recipientName === user.name) {
       const sender = people.find((p) => p.name === sig.senderName) || {
         id: `guest-${Date.now()}`,
@@ -441,6 +523,7 @@ function MainAppContent() {
           duration: 3.5,
           color: sig.color,
           sharedMeaning: sig.meaning,
+          customTapLoop: sig.customTapLoop,
           createdAt: Date.now(),
         },
       };
@@ -483,6 +566,7 @@ function MainAppContent() {
       senderName: sigData.senderName || 'همراه واقعی',
       recipientName: language === 'fa' ? 'شما' : 'You',
       meaning: sigData.symbolMeaning || (language === 'fa' ? 'سیگنال زنده' : 'Live Signal'),
+      customTapLoop: sigData.customTapLoop,
     };
 
     setEnvironmentTint(orbColor);
@@ -582,6 +666,60 @@ function MainAppContent() {
     setEnvironmentTint(sender.color);
     setActiveSignals((prev) => [...prev, traveling]);
     ambientAudio.playBreathPulse(0.6);
+  };
+
+  // Idea 3: Send Co-Touch State
+  const handleSendCoTouch = (action: 'start' | 'move' | 'end', touch: any) => {
+    if (spaceId) {
+      spaceSync.sendCoTouchState(
+        action,
+        {
+          ...touch,
+          userId: user.id || 'user',
+          userName: user.name || 'همراه',
+        },
+        spaceId
+      );
+    }
+
+    if (action === 'start') {
+      setIsCoTouchActive(true);
+      const partner = people.find((p) => p.id === touch.targetPersonId);
+      if (partner) {
+        setCoTouchPartnerName(partner.name);
+        setCoTouchPartnerColor(partner.color.accent);
+      }
+      ambientAudio.startCoTouchResonance(touch.intensity || 0.85);
+    } else if (action === 'end') {
+      setIsCoTouchActive(false);
+      ambientAudio.stopCoTouchResonance();
+    }
+  };
+
+  // Idea 5: Save Tap Loop
+  const handleSaveTapLoop = (tapLoop: any) => {
+    setSavedTapLoops((prev) => [tapLoop, ...prev]);
+    if (spaceId) {
+      spaceSync.saveTapLoop(tapLoop, spaceId);
+    }
+  };
+
+  // Idea 5: Transmit Tap Loop immediately
+  const handleTransmitTapLoop = (recipient: Person, tapLoop: any) => {
+    const signal: SignalData = {
+      id: `sig-tap-${Date.now()}`,
+      senderId: 'user',
+      recipientId: recipient.id,
+      waveShape: 'radiant_burst',
+      intensity: 0.8,
+      rhythmSpeed: tapLoop.tempoSpeed || 1.0,
+      duration: (tapLoop.totalDuration / 1000) || 3.0,
+      color: recipient.color,
+      sharedMeaning: tapLoop.name,
+      customTapLoop: tapLoop,
+      createdAt: Date.now(),
+    };
+    handleSendSignal(signal);
   };
 
   // Toggle Real-People-Only mode vs Demo Bots
@@ -744,6 +882,15 @@ function MainAppContent() {
         onTriggerInstantPulse={handleInstantPulse}
         onAddRipple={addRipple}
         showAccessibilityLabels={showAccessibilityLabels}
+        onSendCoTouch={handleSendCoTouch}
+        isCoTouchActive={isCoTouchActive}
+        coTouchPartnerName={coTouchPartnerName}
+        coTouchPartnerColor={coTouchPartnerColor}
+        coTouchHarmonyScore={coTouchHarmonyScore}
+        onOpenTapStudio={(p) => {
+          setTapStudioTargetPerson(p || null);
+          setIsTapStudioOpen(true);
+        }}
       />
 
       {/* 3. Unified Responsive Floating Navigation Header */}
@@ -796,6 +943,21 @@ function MainAppContent() {
             {people.length > 0 && (
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
             )}
+          </button>
+
+          {/* Sensory Tap Studio (Idea 5) */}
+          <button
+            id="btn-open-tap-studio"
+            onClick={() => {
+              setTapStudioTargetPerson(people[0] || null);
+              setIsTapStudioOpen(true);
+            }}
+            className="min-h-[42px] px-3 sm:px-3.5 rounded-full bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-400/35 backdrop-blur-md transition-all flex items-center gap-1.5 cursor-pointer shadow-md hover:scale-105 active:scale-95"
+            title={t.tapLoopsTitle}
+            aria-label="Open Sensory Tap Studio"
+          >
+            <Music className="w-4 h-4 text-cyan-300" />
+            <span className="text-xs font-medium hidden md:inline">{t.tapStudioBtn}</span>
           </button>
 
           {/* iOS Web Push Notifications Setup Button */}
@@ -917,6 +1079,19 @@ function MainAppContent() {
                   isRtl ? 'left-0' : 'right-0'
                 } w-52 p-2 rounded-2xl bg-zinc-950/95 border border-white/15 backdrop-blur-xl shadow-2xl flex flex-col gap-1 z-50 animate-fade-in`}
               >
+                {/* Sensory Tap Studio */}
+                <button
+                  onClick={() => {
+                    setTapStudioTargetPerson(people[0] || null);
+                    setIsTapStudioOpen(true);
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-cyan-400/15 text-xs text-cyan-300 transition-colors text-start"
+                >
+                  <Music className="w-4 h-4 text-cyan-400 shrink-0" />
+                  <span>{t.tapStudioBtn}</span>
+                </button>
+
                 {/* Circles & Groups Manager */}
                 <button
                   onClick={() => {
@@ -1076,8 +1251,24 @@ function MainAppContent() {
             recipient={composerRecipient}
             user={user}
             sharedLanguages={sharedLanguages}
+            savedTapLoops={savedTapLoops}
+            onOpenTapStudio={() => setIsTapStudioOpen(true)}
             onSendSignal={handleSendSignal}
             onCancel={() => setComposerRecipient(null)}
+          />
+        )}
+
+        {/* Sensory Tap Loop Studio Modal */}
+        {isTapStudioOpen && (
+          <SensoryTapLoopRecorderModal
+            isOpen={isTapStudioOpen}
+            onClose={() => setIsTapStudioOpen(false)}
+            user={user}
+            selectedPerson={tapStudioTargetPerson || people[0] || null}
+            people={people}
+            onTransmitTapLoop={handleTransmitTapLoop}
+            onSaveTapLoop={handleSaveTapLoop}
+            savedLoops={savedTapLoops}
           />
         )}
 

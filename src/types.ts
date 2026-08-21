@@ -32,6 +32,61 @@ export interface Person {
 
 export type WaveShape = 'soft_wave' | 'double_pulse' | 'radiant_burst' | 'starlit_flicker' | 'deep_echo' | 'steady_hum';
 
+export interface TapPoint {
+  id?: string;
+  time: number; // ms offset from start of loop
+  x: number; // 0..1 relative touch position
+  y: number; // 0..1 relative touch position
+  intensity: number; // 0.1 .. 1.0 touch force/pressure
+  pitchFreq?: number; // audio pitch frequency
+}
+
+export interface CustomTapLoop {
+  id: string;
+  name: string;
+  description?: string;
+  taps: TapPoint[];
+  totalDuration: number; // in ms
+  color?: OrbColor;
+  tempoSpeed?: number;
+  createdAt: number;
+  authorName: string;
+  authorId?: string;
+  targetPersonId?: string;
+}
+
+export interface CoTouchState {
+  active: boolean;
+  userId: string;
+  userName: string;
+  userColor: OrbColor;
+  targetPersonId?: string;
+  x: number; // 0..1 normalized coords
+  y: number;
+  intensity: number;
+  updatedAt: number;
+}
+
+export interface CoTouchBridge {
+  id: string;
+  userA: {
+    id: string;
+    name: string;
+    color: OrbColor;
+    x: number;
+    y: number;
+  };
+  userB: {
+    id: string;
+    name: string;
+    color: OrbColor;
+    x: number;
+    y: number;
+  };
+  harmonyScore: number;
+  activeSince: number;
+}
+
 export interface SignalData {
   id: string;
   senderId: string;
@@ -42,6 +97,7 @@ export interface SignalData {
   duration: number; // in seconds
   color: OrbColor;
   sharedMeaning?: string;
+  customTapLoop?: CustomTapLoop;
   createdAt: number;
   read?: boolean;
 }
@@ -127,5 +183,6 @@ export interface TravelingSignal {
   senderName: string;
   recipientName: string;
   meaning?: string;
+  customTapLoop?: CustomTapLoop;
 }
 

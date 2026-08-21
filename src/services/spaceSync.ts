@@ -1,7 +1,7 @@
-import { Person, SignalData, UserIdentity, OrbColor, CircleGroup } from '../types';
+import { Person, SignalData, UserIdentity, OrbColor, CircleGroup, CoTouchState, CustomTapLoop } from '../types';
 
 export type SpaceEventHandler = (event: {
-  type: 'CONNECTED' | 'MEMBER_JOINED' | 'MEMBER_LEFT' | 'MEMBERS_UPDATED' | 'SIGNAL_RECEIVED' | 'PRESENCE_CHANGED' | 'CIRCLE_DELETED';
+  type: 'CONNECTED' | 'MEMBER_JOINED' | 'MEMBER_LEFT' | 'MEMBERS_UPDATED' | 'SIGNAL_RECEIVED' | 'PRESENCE_CHANGED' | 'CIRCLE_DELETED' | 'CO_TOUCH_EVENT' | 'TAP_LOOP_SAVED';
   data: any;
 }) => void;
 
@@ -297,6 +297,72 @@ class SpaceSyncService {
     }
     this.currentSpaceId = null;
     this.currentUserId = null;
+  }
+
+  /**
+   * Broadcasts real-time Co-Touch coordinate & state
+   */
+  public async sendCoTouchState(action: 'start' | 'move' | 'end', touch: CoTouchState, targetSpaceId?: string): Promise<void> {
+    const spaceId = targetSpaceId || this.currentSpaceId;
+    if (!spaceId) return;
+    try {
+      await fetch(`/api/spaces/${encodeURIComponent(spaceId)}/co-touch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, touch }),
+      });
+      // Also broadcast locally across tabs
+      if (this.broadcastChannel) {
+        this.broadcastChannel.postMessage({
+          type: 'CO_TOUCH_EVENT',
+          data: { action, touch },
+        });
+      }
+    } catch {}
+  }
+
+  /**
+   * Saves and broadcasts a custom sensory tap loop to the active space
+   */
+  public async saveTapLoop(tapLoop: CustomTapLoop, targetSpaceId?: string): Promise<CustomTapLoop | null> {
+    const spaceId = targetSpaceId || this.currentSpaceId;
+    if (!spaceId) return null;
+    try {
+      const res = await fetch(`/api/spaces/${encodeURIComponent(spaceId)}/tap-loops`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tapLoop }),
+      });
+      const data = await res.json();
+      if (data.success && data.tapLoop) {
+        if (this.broadcastChannel) {
+          this.broadcastChannel.postMessage({
+            type: 'TAP_LOOP_SAVED',
+            data: { tapLoop: data.tapLoop },
+          });
+        }
+        return data.tapLoop;
+      }
+    } catch (err) {
+      console.error('Error saving tap loop:', err);
+    }
+    return null;
+  }
+
+  /**
+   * Fetches saved custom tap loops for the space
+   */
+  public async fetchTapLoops(targetSpaceId?: string): Promise<CustomTapLoop[]> {
+    const spaceId = targetSpaceId || this.currentSpaceId;
+    if (!spaceId) return [];
+    try {
+      const res = await fetch(`/api/spaces/${encodeURIComponent(spaceId)}/tap-loops`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.loops)) {
+        return data.loops;
+      }
+    } catch {}
+    return [];
   }
 
   public mapToPerson(p: any): Person {
