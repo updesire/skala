@@ -55,6 +55,24 @@ export interface Translations {
   echoResonance: string;
   reachedYou: string;
 
+  // Zero-Friction Gesture Interactions
+  singleTapSend: string;
+  doubleTapHeartbeat: string;
+  holdHaloMenu: string;
+  gestureSoftWave: string;
+  gestureHeartbeat: string;
+  gestureDeepEcho: string;
+  gestureStarlit: string;
+  gestureRadiant: string;
+  gestureMoreOptions: string;
+  gestureHintInstruction: string;
+  signalSentToast: string;
+  heartbeatSentToast: string;
+  deepEchoSentToast: string;
+  starlitSentToast: string;
+  radiantSentToast: string;
+  quickInteractionPill: string;
+
   // Composer
   composingTo: string;
   waveSignature: string;
@@ -243,6 +261,23 @@ export const translations: Record<Language, Translations> = {
     replayResonance: 'بازپخش طنین',
     echoResonance: 'پژواک طنین',
     reachedYou: 'به شما رسید',
+
+    singleTapSend: 'یک ضربه: ارسال فوری',
+    doubleTapHeartbeat: 'دو ضربه: تپش قلب',
+    holdHaloMenu: 'نگه‌داشتن: هاله‌ی امواج لمسی',
+    gestureSoftWave: 'موج نرم',
+    gestureHeartbeat: 'تپش قلب',
+    gestureDeepEcho: 'پژواک عمیق',
+    gestureStarlit: 'سوسوی ستاره',
+    gestureRadiant: 'فوران تابناک',
+    gestureMoreOptions: 'تنظیمات و واژه‌نامه',
+    gestureHintInstruction: 'به یکی از سمت‌ها بکشید و رها کنید',
+    signalSentToast: 'موج نوری با موفقیت پرواز کرد ✨',
+    heartbeatSentToast: 'تپش صمیمانه قلب ارسال شد 💓',
+    deepEchoSentToast: 'پژواک عمیق ارسال شد 🌊',
+    starlitSentToast: 'سوسوی ستاره‌ای ارسال شد ✨',
+    radiantSentToast: 'فوران تابناک ارسال شد 💥',
+    quickInteractionPill: 'لمس مستقیم: تپ برای موج | دوبار تپ برای ضربان | نگه‌داشتن برای هاله',
 
     composingTo: 'در حال ارسال به',
     waveSignature: 'امضای موجی',
@@ -441,6 +476,23 @@ export const translations: Record<Language, Translations> = {
     replayResonance: 'Replay Resonance',
     echoResonance: 'Echo Resonance',
     reachedYou: 'reached you',
+
+    singleTapSend: 'Single Tap: Instant Wave',
+    doubleTapHeartbeat: 'Double Tap: Heartbeat',
+    holdHaloMenu: 'Hold: Wave Halo',
+    gestureSoftWave: 'Soft Wave',
+    gestureHeartbeat: 'Heartbeat',
+    gestureDeepEcho: 'Deep Echo',
+    gestureStarlit: 'Starlit',
+    gestureRadiant: 'Radiant Surge',
+    gestureMoreOptions: 'Full Settings & Codex',
+    gestureHintInstruction: 'Slide toward a wave and release',
+    signalSentToast: 'Light wave sent across space ✨',
+    heartbeatSentToast: 'Heartbeat pulse sent 💓',
+    deepEchoSentToast: 'Deep echo sent 🌊',
+    starlitSentToast: 'Starlit shimmer sent ✨',
+    radiantSentToast: 'Radiant burst sent 💥',
+    quickInteractionPill: 'Direct Touch: Tap for Wave | Double Tap for Heartbeat | Hold for Halo',
 
     composingTo: 'Composing to',
     waveSignature: 'Wave Signature',

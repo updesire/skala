@@ -9,6 +9,7 @@ import {
   TravelingSignal,
   SignalData,
   OrbColor,
+  WaveShape,
 } from './types';
 import {
   INITIAL_PEOPLE,
@@ -636,6 +637,44 @@ function MainAppContent() {
     handleSendSignal(signal);
   };
 
+  // Zero-friction gesture wave dispatch
+  const handleSendCustomWave = (
+    recipient: Person,
+    waveShape: WaveShape,
+    intensity = 0.65,
+    customMeaning?: string
+  ) => {
+    const defaultMeanings: Record<WaveShape, { fa: string; en: string }> = {
+      soft_wave: { fa: 'موج نرم حضور', en: 'Gentle presence' },
+      double_pulse: { fa: 'تپش صمیمانه قلب', en: 'Heartbeat pulse' },
+      deep_echo: { fa: 'پژواک عمیق طنین', en: 'Deep resonance echo' },
+      starlit_flicker: { fa: 'سوسوی ستاره‌ای', en: 'Starlit shimmer' },
+      radiant_burst: { fa: 'فوران تابناک', en: 'Radiant surge' },
+      steady_hum: { fa: 'نوای پیوسته و آرام', en: 'Steady presence' },
+    };
+
+    const meaning =
+      customMeaning ||
+      (language === 'fa'
+        ? defaultMeanings[waveShape]?.fa || 'سیگنال زنده'
+        : defaultMeanings[waveShape]?.en || 'Live signal');
+
+    const signal: SignalData = {
+      id: `sig-quick-${Date.now()}`,
+      senderId: 'user',
+      recipientId: recipient.id,
+      waveShape,
+      intensity,
+      rhythmSpeed: waveShape === 'double_pulse' ? 1.2 : 1.0,
+      duration: 3.2,
+      color: recipient.color,
+      sharedMeaning: meaning,
+      createdAt: Date.now(),
+    };
+
+    handleSendSignal(signal);
+  };
+
   // Simulate an incoming signal
   const handleSimulateIncoming = (preferredSender?: Person) => {
     const list = people.length > 0 ? people : INITIAL_PEOPLE;
@@ -880,6 +919,7 @@ function MainAppContent() {
         onRestoreBots={handleRestoreBots}
         isRealPeopleOnly={isRealPeopleOnly}
         onTriggerInstantPulse={handleInstantPulse}
+        onSendCustomWave={handleSendCustomWave}
         onAddRipple={addRipple}
         showAccessibilityLabels={showAccessibilityLabels}
         onSendCoTouch={handleSendCoTouch}

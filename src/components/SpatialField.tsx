@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Person, UserIdentity, TouchRipple, TravelingSignal, CoTouchState } from '../types';
+import { Person, UserIdentity, TouchRipple, TravelingSignal, CoTouchState, WaveShape } from '../types';
 import { LivingOrb } from './LivingOrb';
 import { CoTouchResonanceHUD } from './CoTouchResonanceHUD';
+import { QuickOrbHalo } from './QuickOrbHalo';
 import { ambientAudio } from '../services/audio';
 import { useLanguage } from '../context/LanguageContext';
-import { UserPlus, Share2, Sparkles, RefreshCw, Music, Zap } from 'lucide-react';
+import { UserPlus, Share2, Sparkles, RefreshCw, Music, Zap, Sliders, Waves, Heart, Radio } from 'lucide-react';
 
 interface SpatialFieldProps {
   people: Person[];
@@ -22,6 +23,7 @@ interface SpatialFieldProps {
   onRestoreBots?: () => void;
   isRealPeopleOnly?: boolean;
   onTriggerInstantPulse: (person: Person) => void;
+  onSendCustomWave?: (person: Person, waveShape: WaveShape, intensity: number, meaning?: string) => void;
   onAddRipple: (ripple: TouchRipple) => void;
   showAccessibilityLabels?: boolean;
   onOpenTapStudio?: (person?: Person | null) => void;
@@ -42,6 +44,14 @@ interface BackgroundMote {
   phase: number;
 }
 
+interface FloatingFeedback {
+  id: string;
+  text: string;
+  color: string;
+  x: number;
+  y: number;
+}
+
 export const SpatialField: React.FC<SpatialFieldProps> = ({
   people,
   user,
@@ -56,6 +66,7 @@ export const SpatialField: React.FC<SpatialFieldProps> = ({
   onRestoreBots,
   isRealPeopleOnly = false,
   onTriggerInstantPulse,
+  onSendCustomWave,
   onAddRipple,
   showAccessibilityLabels = false,
   onOpenTapStudio,
@@ -73,11 +84,19 @@ export const SpatialField: React.FC<SpatialFieldProps> = ({
     height: typeof window !== 'undefined' ? window.innerHeight : 600,
   });
 
+  // Zero-Friction Gesture Halo State
+  const [haloPerson, setHaloPerson] = useState<Person | null>(null);
+  const [haloPos, setHaloPos] = useState<{ x: number; y: number } | null>(null);
+  const [floatingFeedbacks, setFloatingFeedbacks] = useState<FloatingFeedback[]>([]);
+
   // Long press timer & hold progress
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const holdIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [holdingPersonId, setHoldingPersonId] = useState<string | null>(null);
   const [holdProgress, setHoldProgress] = useState<number>(0);
+
+  // Multi-tap tracker for instant single vs double tap
+  const tapTrackersRef = useRef<Record<string, { lastTap: number; timer: NodeJS.Timeout | null }>>({});
 
   // Active ripples on stage
   const activeRipplesRef = useRef<TouchRipple[]>([]);
@@ -461,13 +480,64 @@ export const SpatialField: React.FC<SpatialFieldProps> = ({
     }
   };
 
-  // Long press handler on an Orb
+  // Helper to trigger floating feedback above an orb
+  const triggerFloatingFeedback = useCallback((person: Person, text: string) => {
+    const pos = getPersonPosition(person);
+    const newFb: FloatingFeedback = {
+      id: `fb-${Date.now()}-${Math.random()}`,
+      text,
+      color: person.color.accent,
+      x: pos.x,
+      y: pos.y - (isMobile ? 32 : 40),
+    };
+    setFloatingFeedbacks((prev) => [...prev, newFb]);
+    setTimeout(() => {
+      setFloatingFeedbacks((prev) => prev.filter((f) => f.id !== newFb.id));
+    }, 1600);
+  }, [getPersonPosition, isMobile]);
+
+  // Execute quick wave dispatch
+  const handleQuickWaveSent = useCallback(
+    (person: Person, waveShape: WaveShape, intensity: number, label: string) => {
+      ambientAudio.playWaveSignatureSound(waveShape, intensity);
+      
+      const pos = getPersonPosition(person);
+      const newRip: TouchRipple = {
+        id: `rip-gesture-${Date.now()}`,
+        x: pos.x,
+        y: pos.y,
+        color: person.color.glow,
+        radius: 16,
+        maxRadius: 240,
+        opacity: 0.9,
+        birth: Date.now(),
+      };
+      activeRipplesRef.current.push(newRip);
+      onAddRipple(newRip);
+
+      if (onSendCustomWave) {
+        onSendCustomWave(person, waveShape, intensity, label);
+      } else {
+        onTriggerInstantPulse(person);
+      }
+
+      triggerFloatingFeedback(person, label);
+    },
+    [getPersonPosition, onAddRipple, onSendCustomWave, onTriggerInstantPulse, triggerFloatingFeedback]
+  );
+
+  // Fast pointer down on an Orb
   const handlePointerDownOrb = (person: Person, e: React.PointerEvent) => {
     e.stopPropagation();
-    setHoldingPersonId(person.id);
-    setHoldProgress(0.05);
+    
+    // Clear any pending single-tap timer for this person
+    if (tapTrackersRef.current[person.id]?.timer) {
+      clearTimeout(tapTrackersRef.current[person.id].timer!);
+      tapTrackersRef.current[person.id].timer = null;
+    }
 
-    ambientAudio.playBreathPulse(0.3);
+    setHoldingPersonId(person.id);
+    setHoldProgress(0.08);
 
     // Notify Co-Touch start across real-time space
     if (onSendCoTouch) {
@@ -483,40 +553,39 @@ export const SpatialField: React.FC<SpatialFieldProps> = ({
     }
 
     const startTime = Date.now();
-    const duration = 650; // ms to trigger long press
+    const holdDuration = 260; // Quick 260ms to blossom the gesture halo
 
     if (holdIntervalRef.current) clearInterval(holdIntervalRef.current);
     holdIntervalRef.current = setInterval(() => {
       const elapsed = Date.now() - startTime;
-      const progress = Math.min(1, elapsed / duration);
+      const progress = Math.min(1, elapsed / holdDuration);
       setHoldProgress(progress);
       if (progress >= 1) {
         clearInterval(holdIntervalRef.current!);
       }
-    }, 25);
+    }, 20);
 
     if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
     longPressTimerRef.current = setTimeout(() => {
-      // Trigger Signal Composer directly from Orb!
+      // Open Quick Gesture Halo directly around the touched orb!
+      const pos = getPersonPosition(person);
+      setHaloPerson(person);
+      setHaloPos(pos);
       setHoldingPersonId(null);
       setHoldProgress(0);
-      if (onSendCoTouch) {
-        onSendCoTouch('end', {
-          userId: user.id || 'user',
-          targetPersonId: person.id,
-          x: (person.x || 0.5),
-          y: (person.y || 0.5),
-          intensity: 0,
-          isActive: false,
-          timestamp: Date.now(),
-        });
+
+      ambientAudio.playBreathPulse(0.4);
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate(20);
       }
-      onOpenComposer(person);
-    }, duration);
+    }, holdDuration);
   };
 
   const handlePointerUpOrb = (person: Person, e: React.PointerEvent) => {
     e.stopPropagation();
+    
+    const wasHoldingLong = holdProgress >= 0.9 || haloPerson !== null;
+
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
@@ -538,18 +607,43 @@ export const SpatialField: React.FC<SpatialFieldProps> = ({
       });
     }
 
-    // If released before long press, treat as tap selection
-    if (holdProgress < 0.85) {
-      if (selectedPersonId === person.id) {
-        onSelectPerson(null);
-      } else {
-        onSelectPerson(person.id);
-        ambientAudio.playRippleTone(380);
-      }
-    }
-
     setHoldingPersonId(null);
     setHoldProgress(0);
+
+    // If gesture halo was NOT opened (i.e. user tapped quickly)
+    if (!wasHoldingLong && !haloPerson) {
+      const now = Date.now();
+      const tracker = tapTrackersRef.current[person.id] || { lastTap: 0, timer: null };
+
+      if (now - tracker.lastTap < 260) {
+        // DOUBLE TAP -> Instant Heartbeat Pulse!
+        if (tracker.timer) {
+          clearTimeout(tracker.timer);
+          tracker.timer = null;
+        }
+        tapTrackersRef.current[person.id] = { lastTap: 0, timer: null };
+
+        handleQuickWaveSent(person, 'double_pulse', 0.85, t.heartbeatSentToast);
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          navigator.vibrate([25, 35, 25]);
+        }
+        onSelectPerson(person.id);
+      } else {
+        // Schedule Single-Tap check
+        tracker.lastTap = now;
+        tracker.timer = setTimeout(() => {
+          // SINGLE TAP -> Instant Soft Wave!
+          handleQuickWaveSent(person, 'soft_wave', 0.55, t.signalSentToast);
+          if (typeof navigator !== 'undefined' && navigator.vibrate) {
+            navigator.vibrate(18);
+          }
+          onSelectPerson(person.id);
+          tracker.timer = null;
+        }, 200);
+
+        tapTrackersRef.current[person.id] = tracker;
+      }
+    }
   };
 
   const handlePointerCancelOrb = () => {
@@ -568,6 +662,8 @@ export const SpatialField: React.FC<SpatialFieldProps> = ({
     }
     setHoldingPersonId(null);
     setHoldProgress(0);
+    setHaloPerson(null);
+    setHaloPos(null);
   };
 
   const selectedPerson = people.find((p) => p.id === selectedPersonId);
@@ -851,6 +947,73 @@ export const SpatialField: React.FC<SpatialFieldProps> = ({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Floating Feedback Badges above Orbs */}
+      <AnimatePresence>
+        {floatingFeedbacks.map((fb) => (
+          <motion.div
+            key={fb.id}
+            initial={{ opacity: 0, scale: 0.75, y: 0 }}
+            animate={{ opacity: 1, scale: 1, y: -24 }}
+            exit={{ opacity: 0, scale: 0.8, y: -48 }}
+            transition={{ duration: 1.3, ease: [0.16, 1, 0.3, 1] }}
+            className="absolute pointer-events-none z-50 -translate-x-1/2 -translate-y-full whitespace-nowrap"
+            style={{ left: fb.x, top: fb.y }}
+            dir={isRtl ? 'rtl' : 'ltr'}
+          >
+            <div
+              className="px-3 py-1.5 rounded-full text-xs font-semibold backdrop-blur-xl shadow-2xl border flex items-center gap-1.5"
+              style={{
+                backgroundColor: 'rgba(10, 10, 14, 0.88)',
+                borderColor: fb.color,
+                color: fb.color,
+                boxShadow: `0 0 20px ${fb.color}66`,
+              }}
+            >
+              <span>{fb.text}</span>
+            </div>
+          </motion.div>
+        ))}
+      </AnimatePresence>
+
+      {/* Zero-Friction Gesture Radial Halo */}
+      <AnimatePresence>
+        {haloPerson && haloPos && (
+          <QuickOrbHalo
+            person={haloPerson}
+            centerPos={haloPos}
+            onSendWave={(waveShape, intensity, label) => {
+              const target = haloPerson;
+              setHaloPerson(null);
+              setHaloPos(null);
+              handleQuickWaveSent(target, waveShape, intensity, label);
+            }}
+            onOpenFullComposer={() => {
+              const target = haloPerson;
+              setHaloPerson(null);
+              setHaloPos(null);
+              onOpenComposer(target);
+            }}
+            onCancel={() => {
+              setHaloPerson(null);
+              setHaloPos(null);
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Subtle Zero-Friction Gesture Micro Hint at Bottom */}
+      {!selectedPerson && people.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 0.65, y: 0 }}
+          exit={{ opacity: 0, y: 10 }}
+          dir={isRtl ? 'rtl' : 'ltr'}
+          className="fixed bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 pointer-events-none z-10 px-3.5 py-1 rounded-full bg-zinc-950/60 border border-white/5 backdrop-blur-sm text-[10px] sm:text-[11px] text-zinc-400 font-light text-center select-none"
+        >
+          <span>{t.quickInteractionPill}</span>
+        </motion.div>
+      )}
     </div>
   );
 };
