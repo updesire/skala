@@ -934,41 +934,41 @@ function MainAppContent() {
       />
 
       {/* 3. Unified Responsive Floating Navigation Header */}
-      <header className="absolute top-0 left-0 right-0 pt-[max(calc(env(safe-area-inset-top,0px)+12px),1.25rem)] px-3 sm:px-5 pb-3 flex items-center justify-between z-30 pointer-events-none bg-gradient-to-b from-black/80 via-black/35 to-transparent">
+      <header className="absolute top-0 left-0 right-0 pt-[max(calc(env(safe-area-inset-top,0px)+8px),0.75rem)] px-2.5 sm:px-5 pb-2.5 flex items-center justify-between z-30 pointer-events-none bg-gradient-to-b from-black/85 via-black/40 to-transparent">
         {/* Start: SKALA Brand Mark & Space / Admin Status Note */}
         <div
-          className="pointer-events-auto flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-zinc-950/85 border border-white/15 backdrop-blur-md shadow-lg max-w-[55vw] sm:max-w-none transition-all cursor-pointer hover:border-cyan-400/40 group"
+          className="pointer-events-auto flex items-center gap-2 sm:gap-2.5 px-2.5 sm:px-3.5 py-1.5 rounded-full bg-zinc-950/90 border border-white/15 backdrop-blur-md shadow-lg max-w-[46vw] sm:max-w-none transition-all cursor-pointer hover:border-cyan-400/40 group shrink-0"
           onClick={() => setIsInviteOpen(true)}
           title={t.inviteModalTitle}
         >
           {/* SKALA Logo Icon Mini */}
-          <div className="relative w-6 h-6 rounded-full overflow-hidden shrink-0 border border-white/20 shadow-[0_0_10px_rgba(56,189,248,0.4)] group-hover:scale-105 transition-transform">
+          <div className="relative w-5 h-5 sm:w-6 sm:h-6 rounded-full overflow-hidden shrink-0 border border-white/20 shadow-[0_0_10px_rgba(56,189,248,0.4)] group-hover:scale-105 transition-transform">
             <img src="/icon.svg" alt="SKALA" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
           </div>
 
-          <div className="flex flex-col text-start overflow-hidden">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] sm:text-xs font-bold tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-sky-300 via-indigo-200 to-pink-300">
+          <div className="flex flex-col text-start overflow-hidden min-w-0">
+            <div className="flex items-center gap-1 sm:gap-1.5 overflow-hidden">
+              <span className="text-[10px] sm:text-xs font-bold tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-sky-300 via-indigo-200 to-pink-300 shrink-0">
                 SKALA
               </span>
-              <span className="w-1 h-1 rounded-full bg-zinc-500" />
-              <span className="text-[11px] sm:text-xs uppercase tracking-wider text-zinc-100 font-medium truncate">
+              <span className="w-1 h-1 rounded-full bg-zinc-500 shrink-0 hidden xs:inline-block" />
+              <span className="text-[10px] sm:text-xs uppercase tracking-wider text-zinc-100 font-medium truncate">
                 {isAdmin ? (language === 'fa' ? `مدیر: ${user.name || 'شما'}` : `Admin: ${user.name || 'You'}`) : (language === 'fa' ? `میزبان: ${invitedHostName || 'مدیر'}` : `Host: ${invitedHostName || 'Admin'}`)}
               </span>
             </div>
-            <span className="text-[10px] text-zinc-400 truncate hidden sm:block">
+            <span className="text-[9px] sm:text-[10px] text-zinc-400 truncate hidden sm:block">
               {spaceName} • {isRealPeopleOnly ? (language === 'fa' ? 'فقط افراد واقعی' : 'Real People Only') : (language === 'fa' ? 'همراه با نمونه‌ها' : 'Sample Circle')}
             </span>
           </div>
         </div>
 
         {/* End: Action Controls */}
-        <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2">
+        <div className="pointer-events-auto flex items-center gap-1 sm:gap-2 shrink-0">
           {/* Primary Invite Link Button */}
           <button
             id="btn-open-invite"
             onClick={() => setIsInviteOpen(true)}
-            className={`min-h-[42px] px-3 sm:px-4 rounded-full backdrop-blur-md transition-all flex items-center gap-1.5 cursor-pointer shadow-lg hover:scale-105 active:scale-95 border shrink-0 ${
+            className={`min-h-[38px] sm:min-h-[42px] px-2.5 sm:px-4 rounded-full backdrop-blur-md transition-all flex items-center gap-1 sm:gap-1.5 cursor-pointer shadow-lg hover:scale-105 active:scale-95 border shrink-0 ${
               isAdmin
                 ? 'bg-amber-400/25 hover:bg-amber-400/35 text-amber-300 border-amber-400/40 ring-1 ring-amber-400/25'
                 : 'bg-cyan-400/25 hover:bg-cyan-400/35 text-cyan-300 border-cyan-400/40'
@@ -976,35 +976,35 @@ function MainAppContent() {
             title={t.inviteModalTitle}
             aria-label="Open Invite Link & Space Manager"
           >
-            {isAdmin ? <ShieldCheck className="w-4 h-4 text-amber-300" /> : <Share2 className="w-4 h-4 text-cyan-300" />}
-            <span className="text-xs font-semibold tracking-wide">
+            {isAdmin ? <ShieldCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-300" /> : <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-300" />}
+            <span className="text-[11px] sm:text-xs font-semibold tracking-wide">
               {language === 'fa' ? 'دعوت' : 'Invite'}
             </span>
             {people.length > 0 && (
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
+              <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
             )}
           </button>
 
-          {/* Sensory Tap Studio (Idea 5) */}
+          {/* Sensory Tap Studio (Idea 5) - Tablet/Desktop */}
           <button
             id="btn-open-tap-studio"
             onClick={() => {
               setTapStudioTargetPerson(people[0] || null);
               setIsTapStudioOpen(true);
             }}
-            className="min-h-[42px] px-3 sm:px-3.5 rounded-full bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-400/35 backdrop-blur-md transition-all flex items-center gap-1.5 cursor-pointer shadow-md hover:scale-105 active:scale-95"
+            className="hidden md:flex min-h-[42px] px-3 sm:px-3.5 rounded-full bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-400/35 backdrop-blur-md transition-all items-center gap-1.5 cursor-pointer shadow-md hover:scale-105 active:scale-95"
             title={t.tapLoopsTitle}
             aria-label="Open Sensory Tap Studio"
           >
             <Music className="w-4 h-4 text-cyan-300" />
-            <span className="text-xs font-medium hidden md:inline">{t.tapStudioBtn}</span>
+            <span className="text-xs font-medium hidden lg:inline">{t.tapStudioBtn}</span>
           </button>
 
-          {/* iOS Web Push Notifications Setup Button */}
+          {/* iOS Web Push Notifications Setup Button - Tablet/Desktop */}
           <button
             id="btn-open-notifications-quick"
             onClick={() => setIsNotificationsOpen(true)}
-            className="min-h-[42px] min-w-[42px] p-2 sm:p-2.5 rounded-full bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-400/35 backdrop-blur-md transition-all flex items-center justify-center cursor-pointer shadow-md hover:scale-105 active:scale-95"
+            className="hidden sm:flex min-h-[42px] min-w-[42px] p-2 sm:p-2.5 rounded-full bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-400/35 backdrop-blur-md transition-all items-center justify-center cursor-pointer shadow-md hover:scale-105 active:scale-95"
             title={language === 'fa' ? 'تنظیمات نوتیفیکیشن موبایل' : 'Mobile Push Notifications'}
             aria-label="Open Mobile Push Notifications"
           >
@@ -1105,125 +1105,131 @@ function MainAppContent() {
             <button
               id="btn-mobile-menu"
               onClick={() => setIsMobileMenuOpen((prev) => !prev)}
-              className="min-h-[42px] min-w-[42px] p-2 rounded-full bg-white/10 text-zinc-200 border border-white/15 backdrop-blur-md cursor-pointer hover:bg-white/20 transition-all flex items-center justify-center"
+              className="min-h-[38px] min-w-[38px] p-2 rounded-full bg-white/10 text-zinc-200 border border-white/15 backdrop-blur-md cursor-pointer hover:bg-white/20 transition-all flex items-center justify-center shrink-0"
               aria-label="Toggle Navigation Menu"
             >
               {isMobileMenuOpen ? <X className="w-4 h-4" /> : <MoreHorizontal className="w-4 h-4" />}
             </button>
 
-            {/* Mobile Dropdown Popup */}
+            {/* Mobile Dropdown Popup & Backdrop */}
             {isMobileMenuOpen && (
-              <div
-                dir={isRtl ? 'rtl' : 'ltr'}
-                className={`absolute top-12 ${
-                  isRtl ? 'left-0' : 'right-0'
-                } w-52 p-2 rounded-2xl bg-zinc-950/95 border border-white/15 backdrop-blur-xl shadow-2xl flex flex-col gap-1 z-50 animate-fade-in`}
-              >
-                {/* Sensory Tap Studio */}
-                <button
-                  onClick={() => {
-                    setTapStudioTargetPerson(people[0] || null);
-                    setIsTapStudioOpen(true);
-                    setIsMobileMenuOpen(false);
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-cyan-400/15 text-xs text-cyan-300 transition-colors text-start"
+              <>
+                <div
+                  className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                />
+                <div
+                  dir={isRtl ? 'rtl' : 'ltr'}
+                  className={`absolute top-11 ${
+                    isRtl ? 'left-0' : 'right-0'
+                  } w-56 max-w-[calc(100vw-20px)] p-2 rounded-2xl bg-zinc-950/95 border border-white/15 backdrop-blur-xl shadow-2xl flex flex-col gap-1 z-50 animate-fade-in`}
                 >
-                  <Music className="w-4 h-4 text-cyan-400 shrink-0" />
-                  <span>{t.tapStudioBtn}</span>
-                </button>
+                  {/* Sensory Tap Studio */}
+                  <button
+                    onClick={() => {
+                      setTapStudioTargetPerson(people[0] || null);
+                      setIsTapStudioOpen(true);
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-cyan-400/15 text-xs text-cyan-300 transition-colors text-start"
+                  >
+                    <Music className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <span>{t.tapStudioBtn}</span>
+                  </button>
 
-                {/* Circles & Groups Manager */}
-                <button
-                  onClick={() => {
-                    setIsCirclesModalOpen(true);
-                    setIsMobileMenuOpen(false);
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-amber-400/15 text-xs text-amber-300 transition-colors text-start"
-                >
-                  <Layers className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span className="flex-1">{language === 'fa' ? 'حلقه‌ها و گروه‌ها' : 'Circles & Groups'}</span>
-                  {(user.isSuperAdmin || user.email?.toLowerCase() === 'soraun.com@gmail.com') && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-300 font-bold">
-                      Admin
+                  {/* Circles & Groups Manager */}
+                  <button
+                    onClick={() => {
+                      setIsCirclesModalOpen(true);
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-amber-400/15 text-xs text-amber-300 transition-colors text-start"
+                  >
+                    <Layers className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span className="flex-1">{language === 'fa' ? 'حلقه‌ها و گروه‌ها' : 'Circles & Groups'}</span>
+                    {(user.isSuperAdmin || user.email?.toLowerCase() === 'soraun.com@gmail.com') && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-300 font-bold">
+                        Admin
+                      </span>
+                    )}
+                  </button>
+
+                  {/* Language switch */}
+                  <button
+                    onClick={() => {
+                      toggleLanguage();
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/10 text-xs text-zinc-200 transition-colors text-start"
+                  >
+                    <Languages className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <span className="flex-1">{t.toggleLanguage}</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-zinc-300 font-mono">
+                      {language === 'fa' ? 'EN' : 'فا'}
                     </span>
-                  )}
-                </button>
+                  </button>
 
-                {/* Language switch */}
-                <button
-                  onClick={() => {
-                    toggleLanguage();
-                    setIsMobileMenuOpen(false);
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/10 text-xs text-zinc-200 transition-colors text-start"
-                >
-                  <Languages className="w-4 h-4 text-cyan-400 shrink-0" />
-                  <span className="flex-1">{t.toggleLanguage}</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-zinc-300 font-mono">
-                    {language === 'fa' ? 'EN' : 'فا'}
-                  </span>
-                </button>
+                  {/* Registration & Companion setup */}
+                  <button
+                    onClick={() => {
+                      setIsRegistrationOpen(true);
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/10 text-xs text-zinc-200 transition-colors text-start"
+                  >
+                    <UserPlus className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>{t.registrationTitle}</span>
+                  </button>
 
-                {/* Registration & Companion setup */}
-                <button
-                  onClick={() => {
-                    setIsRegistrationOpen(true);
-                    setIsMobileMenuOpen(false);
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/10 text-xs text-zinc-200 transition-colors text-start"
-                >
-                  <UserPlus className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>{t.registrationTitle}</span>
-                </button>
+                  {/* Notifications setup */}
+                  <button
+                    onClick={() => {
+                      setIsNotificationsOpen(true);
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/10 text-xs text-sky-200 transition-colors text-start"
+                  >
+                    <BellRing className="w-4 h-4 text-sky-400 shrink-0" />
+                    <span>{language === 'fa' ? 'نوتیفیکیشن پس‌زمینه (آیفون)' : 'Background Notifications'}</span>
+                  </button>
 
-                {/* Notifications setup */}
-                <button
-                  onClick={() => {
-                    setIsNotificationsOpen(true);
-                    setIsMobileMenuOpen(false);
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/10 text-xs text-sky-200 transition-colors text-start"
-                >
-                  <BellRing className="w-4 h-4 text-sky-400 shrink-0" />
-                  <span>{language === 'fa' ? 'نوتیفیکیشن پس‌زمینه (آیفون)' : 'Background Notifications'}</span>
-                </button>
+                  {/* Memories Archive */}
+                  <button
+                    onClick={() => {
+                      setIsMemoriesOpen(true);
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/10 text-xs text-zinc-200 transition-colors text-start"
+                  >
+                    <History className="w-4 h-4 text-purple-400 shrink-0" />
+                    <span>{t.memories} ({memories.length})</span>
+                  </button>
 
-                {/* Memories Archive */}
-                <button
-                  onClick={() => {
-                    setIsMemoriesOpen(true);
-                    setIsMobileMenuOpen(false);
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/10 text-xs text-zinc-200 transition-colors text-start"
-                >
-                  <History className="w-4 h-4 text-purple-400 shrink-0" />
-                  <span>{t.memories} ({memories.length})</span>
-                </button>
+                  {/* Simulate Inbound Signal */}
+                  <button
+                    onClick={() => {
+                      handleSimulateIncoming();
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/10 text-xs text-zinc-200 transition-colors text-start"
+                  >
+                    <Radio className="w-4 h-4 text-pink-400 shrink-0" />
+                    <span>{t.simulateInbound}</span>
+                  </button>
 
-                {/* Simulate Inbound Signal */}
-                <button
-                  onClick={() => {
-                    handleSimulateIncoming();
-                    setIsMobileMenuOpen(false);
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/10 text-xs text-zinc-200 transition-colors text-start"
-                >
-                  <Radio className="w-4 h-4 text-pink-400 shrink-0" />
-                  <span>{t.simulateInbound}</span>
-                </button>
-
-                {/* Semantic Labels Toggle */}
-                <button
-                  onClick={() => {
-                    setShowAccessibilityLabels((p) => !p);
-                    setIsMobileMenuOpen(false);
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/10 text-xs text-zinc-200 transition-colors text-start"
-                >
-                  <UserCheck className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span>{showAccessibilityLabels ? 'پنهان‌سازی نام‌ها' : 'نمایش برچسب‌ها'}</span>
-                </button>
-              </div>
+                  {/* Semantic Labels Toggle */}
+                  <button
+                    onClick={() => {
+                      setShowAccessibilityLabels((p) => !p);
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/10 text-xs text-zinc-200 transition-colors text-start"
+                  >
+                    <UserCheck className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>{showAccessibilityLabels ? 'پنهان‌سازی نام‌ها' : 'نمایش برچسب‌ها'}</span>
+                  </button>
+                </div>
+              </>
             )}
           </div>
         </div>

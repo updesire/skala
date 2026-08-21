@@ -20,7 +20,7 @@ export const SoundAtmosphereToggle: React.FC = () => {
     <button
       id="btn-toggle-ambient-sound"
       onClick={handleToggle}
-      className="p-2.5 rounded-full bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-zinc-200 border border-white/5 backdrop-blur-md transition-all flex items-center gap-2 group cursor-pointer"
+      className="min-h-[38px] min-w-[38px] sm:min-h-[42px] sm:min-w-[42px] p-2 sm:p-2.5 rounded-full bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-zinc-200 border border-white/10 backdrop-blur-md transition-all flex items-center justify-center gap-1.5 group cursor-pointer shrink-0"
       title={isPlaying ? t.muteAtmosphere : t.enableAtmosphere}
       aria-label="Toggle ambient atmospheric audio"
     >
