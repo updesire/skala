@@ -2,8 +2,10 @@ import express, { Request, Response, NextFunction } from "express";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
+import bcrypt from "bcryptjs";
 import { createServer as createViteServer } from "vite";
 import webpush from "web-push";
+import { initMySQLPool, getPool, getMySQLStatus, getMySQLConfig } from "./src/db/mysql";
 
 export interface Participant {
   id: string;
@@ -54,6 +56,7 @@ export interface CustomTapLoop {
 
 export interface SignalEvent {
   id: string;
+  spaceId?: string;
   senderId: string;
   senderName: string;
   recipientId?: string; // empty means broadcast to all
@@ -63,7 +66,7 @@ export interface SignalEvent {
   color: string;
   privateIntention?: string;
   symbolMeaning?: string;
-  sourceType?: 'gesture' | 'tap_loop' | 'resonance' | 'biometric_rhythm';
+  sourceType?: 'gesture' | 'tap_loop' | 'resonance' | 'biometric_rhythm' | 'system_broadcast';
   customTapLoop?: CustomTapLoop;
   timestamp: number;
 }
@@ -83,12 +86,15 @@ export interface PushSubscriptionRecord {
 export interface UserAccount {
   id: string;
   email: string;
+  passwordHash?: string;
   name: string;
   role: 'user' | 'admin' | 'super_admin';
   createdAt: number;
+  lastSeen?: number;
   color: any;
   texture: string;
   presence: string;
+  breathRate?: number;
 }
 
 export interface UserSession {
@@ -142,7 +148,96 @@ const sseClients = new Map<string, Set<{ res: Response; userId: string }>>();
 const SUPER_ADMIN_EMAIL = "soraun.com@gmail.com";
 const DEFAULT_MASTER_SPACE_ID = "main-cosmic-circle";
 
-// Persistence load functions
+// Persistence load functions & MySQL synchronization
+async function syncUserToMySQL(user: UserAccount) {
+  const pool = getPool();
+  if (!pool) return;
+  try {
+    const colorJson = JSON.stringify(user.color || {});
+    await pool.query(
+      `INSERT INTO users (id, email, password_hash, name, role, presence, texture, breath_rate, color_json, last_seen, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         name = VALUES(name),
+         password_hash = COALESCE(VALUES(password_hash), password_hash),
+         role = VALUES(role),
+         presence = VALUES(presence),
+         texture = VALUES(texture),
+         breath_rate = VALUES(breath_rate),
+         color_json = VALUES(color_json),
+         last_seen = VALUES(last_seen),
+         updated_at = VALUES(updated_at)`,
+      [
+        user.id,
+        user.email,
+        user.passwordHash || null,
+        user.name,
+        user.role,
+        user.presence || 'present',
+        user.texture || 'fluid',
+        user.breathRate || 4.5,
+        colorJson,
+        user.lastSeen || Date.now(),
+        user.createdAt || Date.now(),
+        Date.now(),
+      ]
+    );
+  } catch (err) {
+    console.warn('[SKALA MySQL] User sync error:', err);
+  }
+}
+
+async function syncSpaceToMySQL(space: SpaceState) {
+  const pool = getPool();
+  if (!pool) return;
+  try {
+    await pool.query(
+      `INSERT INTO spaces (id, name, description, host_name, host_email, host_id, is_system_space, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         name = VALUES(name),
+         description = VALUES(description),
+         host_name = VALUES(host_name),
+         host_email = VALUES(host_email),
+         host_id = VALUES(host_id),
+         updated_at = VALUES(updated_at)`,
+      [
+        space.id,
+        space.name,
+        space.description || null,
+        space.hostName,
+        space.hostEmail || null,
+        space.hostId,
+        space.id === DEFAULT_MASTER_SPACE_ID ? 1 : 0,
+        space.createdAt,
+        Date.now(),
+      ]
+    );
+  } catch (err) {
+    console.warn('[SKALA MySQL] Space sync error:', err);
+  }
+}
+
+async function deleteSpaceFromMySQL(spaceId: string) {
+  const pool = getPool();
+  if (!pool) return;
+  try {
+    await pool.query(`DELETE FROM spaces WHERE id = ?`, [spaceId]);
+  } catch (err) {
+    console.warn('[SKALA MySQL] Space delete error:', err);
+  }
+}
+
+async function deleteUserFromMySQL(userId: string) {
+  const pool = getPool();
+  if (!pool) return;
+  try {
+    await pool.query(`DELETE FROM users WHERE id = ?`, [userId]);
+  } catch (err) {
+    console.warn('[SKALA MySQL] User delete error:', err);
+  }
+}
+
 function loadDataFromDisk() {
   try {
     // 1. Users
@@ -523,16 +618,23 @@ setInterval(() => {
 // API ENDPOINTS
 // ==========================================
 
-// 1. User Registration & Secure Auth
-app.post("/api/auth/register", (req: Request, res: Response) => {
-  const { name, email, color, texture, presence } = req.body;
+const SERVER_START_TIME = Date.now();
+
+// 1. User Registration & Secure Auth with optional password
+app.post("/api/auth/register", async (req: Request, res: Response) => {
+  const { name, email, password, color, texture, presence, breathRate } = req.body;
   if (!name || !email) {
     return res.status(400).json({ error: "نام و ایمیل الزامی است" });
   }
 
   const cleanEmail = email.trim().toLowerCase();
   const isSuper = isSuperAdminEmail(cleanEmail);
-  const role: 'user' | 'admin' | 'super_admin' = isSuper ? "super_admin" : "admin";
+  const role: 'user' | 'admin' | 'super_admin' = isSuper ? "super_admin" : "user";
+
+  let passwordHash: string | undefined = undefined;
+  if (password && typeof password === "string" && password.trim().length >= 4) {
+    passwordHash = await bcrypt.hash(password.trim(), 10);
+  }
 
   let user = users.get(cleanEmail);
   if (!user) {
@@ -540,8 +642,10 @@ app.post("/api/auth/register", (req: Request, res: Response) => {
       id: `user-${crypto.randomBytes(6).toString("hex")}`,
       name: name.trim(),
       email: cleanEmail,
+      passwordHash,
       role,
       createdAt: Date.now(),
+      lastSeen: Date.now(),
       color: color || {
         name: isSuper ? "Solar Amber" : "Celestial Cyan",
         primary: isSuper ? "#f59e0b" : "#0ea5e9",
@@ -551,17 +655,23 @@ app.post("/api/auth/register", (req: Request, res: Response) => {
       },
       texture: texture || (isSuper ? "aurora" : "fluid"),
       presence: presence || "present",
+      breathRate: breathRate || 4.5,
     };
     users.set(cleanEmail, user);
     usersById.set(user.id, user);
-    saveUsersToDisk();
   } else {
     user.name = name.trim();
+    if (passwordHash) user.passwordHash = passwordHash;
     if (color) user.color = color;
     if (texture) user.texture = texture;
-    user.role = role;
-    saveUsersToDisk();
+    if (presence) user.presence = presence;
+    if (breathRate) user.breathRate = breathRate;
+    if (isSuper) user.role = "super_admin";
+    user.lastSeen = Date.now();
   }
+
+  saveUsersToDisk();
+  await syncUserToMySQL(user);
 
   const session = generateSecureSession(user);
 
@@ -579,12 +689,62 @@ app.post("/api/auth/register", (req: Request, res: Response) => {
       presence: user.presence,
       texture: user.texture,
       motionPersonality: "meditative",
-      breathRate: 4.5,
+      breathRate: user.breathRate || 4.5,
     },
   });
 });
 
-// 2. Get Current Auth Status
+// 2. User Login with Password or Email
+app.post("/api/auth/login", async (req: Request, res: Response) => {
+  const { email, password } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: "ایمیل الزامی است" });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const user = users.get(cleanEmail);
+
+  if (!user) {
+    return res.status(404).json({ error: "کاربری با این ایمیل یافت نشد. لطفاً ابتدا ثبت‌نام کنید." });
+  }
+
+  // If user has a set password, verify it
+  if (user.passwordHash && password) {
+    const isMatch = await bcrypt.compare(password.trim(), user.passwordHash);
+    if (!isMatch) {
+      return res.status(401).json({ error: "رمز عبور وارد شده نادرست است" });
+    }
+  }
+
+  user.lastSeen = Date.now();
+  if (isSuperAdminEmail(cleanEmail)) {
+    user.role = "super_admin";
+  }
+  saveUsersToDisk();
+  await syncUserToMySQL(user);
+
+  const session = generateSecureSession(user);
+
+  res.json({
+    success: true,
+    sessionToken: session.token,
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      isAdmin: user.role === "admin" || user.role === "super_admin",
+      isSuperAdmin: user.role === "super_admin",
+      role: user.role,
+      color: user.color,
+      presence: user.presence,
+      texture: user.texture,
+      motionPersonality: "meditative",
+      breathRate: user.breathRate || 4.5,
+    },
+  });
+});
+
+// 3. Get Current Auth Status
 app.get("/api/auth/me", (req: AuthRequest, res: Response) => {
   if (!req.user) {
     return res.json({ authenticated: false });
@@ -602,8 +762,18 @@ app.get("/api/auth/me", (req: AuthRequest, res: Response) => {
       color: req.user.color,
       presence: req.user.presence,
       texture: req.user.texture,
+      breathRate: req.user.breathRate || 4.5,
     },
   });
+});
+
+// 4. Logout
+app.post("/api/auth/logout", (req: AuthRequest, res: Response) => {
+  if (req.sessionToken && sessions.has(req.sessionToken)) {
+    sessions.delete(req.sessionToken);
+    saveSessionsToDisk();
+  }
+  res.json({ success: true });
 });
 
 // 3. Circles Management
@@ -1104,19 +1274,292 @@ app.get("/api/spaces/:spaceId/events", (req: Request, res: Response) => {
   });
 });
 
-// 12. Health Check
+// 12. Super Admin Management Endpoints
+app.get("/api/admin/overview", requireAdmin, (_req: AuthRequest, res: Response) => {
+  const mysqlStatus = getMySQLStatus();
+  let totalSignals = 0;
+  let activeOnlineUsers = 0;
+
+  for (const space of spaces.values()) {
+    totalSignals += space.signals.length;
+    activeOnlineUsers += space.participants.size;
+  }
+
+  let totalPushSubs = 0;
+  for (const map of pushSubscriptions.values()) {
+    totalPushSubs += map.size;
+  }
+
+  res.json({
+    databaseType: mysqlStatus.isConnected ? "mysql" : "local_file",
+    mysqlConnected: mysqlStatus.isConnected,
+    dbHost: mysqlStatus.config?.host || "localhost",
+    dbName: mysqlStatus.config?.database || "skala_db (local disk)",
+    connectionError: mysqlStatus.connectionError,
+    totalUsers: users.size,
+    totalSpaces: spaces.size,
+    totalSignals,
+    totalPushSubscriptions: totalPushSubs,
+    activeOnlineUsers,
+    serverUptimeSeconds: Math.floor((Date.now() - SERVER_START_TIME) / 1000),
+    superAdminEmail: SUPER_ADMIN_EMAIL,
+  });
+});
+
+app.get("/api/admin/users", requireAdmin, (_req: AuthRequest, res: Response) => {
+  const list = Array.from(users.values()).map((u) => ({
+    id: u.id,
+    email: u.email,
+    name: u.name,
+    role: u.role,
+    createdAt: u.createdAt,
+    lastSeen: u.lastSeen,
+    presence: u.presence,
+    texture: u.texture,
+    color: u.color,
+  }));
+
+  res.json({ success: true, users: list });
+});
+
+app.put("/api/admin/users/:userId/role", requireAdmin, async (req: AuthRequest, res: Response) => {
+  const { userId } = req.params;
+  const { role } = req.body;
+
+  if (!["user", "admin", "super_admin"].includes(role)) {
+    return res.status(400).json({ error: "نقش نامعتبر است" });
+  }
+
+  const user = usersById.get(userId);
+  if (!user) {
+    return res.status(404).json({ error: "کاربر یافت نشد" });
+  }
+
+  // Prevent demoting the master super admin email
+  if (isSuperAdminEmail(user.email) && role !== "super_admin") {
+    return res.status(400).json({ error: "نمی‌توان نقش مدیر ارشد اصلی را تغییر داد" });
+  }
+
+  user.role = role;
+  saveUsersToDisk();
+  await syncUserToMySQL(user);
+
+  // Update existing sessions for this user
+  for (const sess of sessions.values()) {
+    if (sess.userId === user.id) {
+      sess.role = role;
+    }
+  }
+  saveSessionsToDisk();
+
+  res.json({ success: true, user: { id: user.id, email: user.email, role: user.role } });
+});
+
+app.delete("/api/admin/users/:userId", requireAdmin, async (req: AuthRequest, res: Response) => {
+  const { userId } = req.params;
+  const user = usersById.get(userId);
+  if (!user) {
+    return res.status(404).json({ error: "کاربر یافت نشد" });
+  }
+
+  if (isSuperAdminEmail(user.email)) {
+    return res.status(400).json({ error: "نمی‌توان حساب مدیر ارشد اصلی را حذف کرد" });
+  }
+
+  users.delete(user.email.toLowerCase());
+  usersById.delete(userId);
+  saveUsersToDisk();
+  await deleteUserFromMySQL(userId);
+
+  // Invalidate user sessions
+  for (const [token, sess] of sessions.entries()) {
+    if (sess.userId === userId) {
+      sessions.delete(token);
+    }
+  }
+  saveSessionsToDisk();
+
+  res.json({ success: true, message: "کاربر با موفقیت حذف شد" });
+});
+
+app.get("/api/admin/spaces", requireAdmin, (_req: AuthRequest, res: Response) => {
+  const list = Array.from(spaces.values()).map((s) => ({
+    id: s.id,
+    name: s.name,
+    description: s.description || "",
+    hostName: s.hostName,
+    hostEmail: s.hostEmail || "",
+    hostId: s.hostId,
+    createdAt: s.createdAt,
+    memberCount: s.participants.size,
+    signalsCount: s.signals.length,
+    isMasterSpace: s.id === DEFAULT_MASTER_SPACE_ID,
+  }));
+
+  res.json({ success: true, spaces: list });
+});
+
+app.delete("/api/admin/spaces/:spaceId", requireAdmin, async (req: AuthRequest, res: Response) => {
+  const { spaceId } = req.params;
+  if (spaceId === DEFAULT_MASTER_SPACE_ID) {
+    return res.status(400).json({ error: "حلقه اصلی اسکالا قابل حذف نیست" });
+  }
+
+  const space = spaces.get(spaceId);
+  if (!space) {
+    return res.status(404).json({ error: "فضا یافت نشد" });
+  }
+
+  broadcastToSpace(spaceId, "CIRCLE_DELETED", { spaceId });
+  spaces.delete(spaceId);
+  saveSpacesToDisk();
+  await deleteSpaceFromMySQL(spaceId);
+
+  res.json({ success: true, message: "فضا حذف شد" });
+});
+
+// Broadcast Cosmic Announcement from Super Admin to ALL connected spaces
+app.post("/api/admin/broadcast", requireAdmin, (req: AuthRequest, res: Response) => {
+  const { title, message, wave, intensity } = req.body;
+  if (!message) {
+    return res.status(400).json({ error: "متن پیام الزامی است" });
+  }
+
+  const senderName = req.user?.name || "مدیر ارشد کیهانی";
+  const waveShape = wave || "radiant_burst";
+  const signalIntensity = intensity || 0.9;
+  let broadcastCount = 0;
+
+  const broadcastEvent: SignalEvent = {
+    id: `admin-broadcast-${Date.now()}`,
+    senderId: req.user?.id || "super-admin",
+    senderName: `${senderName} 👑`,
+    wave: waveShape,
+    intensity: signalIntensity,
+    tempo: 1.2,
+    color: "#f59e0b",
+    symbolMeaning: title || "پیام همگانی مدیریت اسکالا",
+    privateIntention: message,
+    sourceType: "system_broadcast",
+    timestamp: Date.now(),
+  };
+
+  for (const [spaceId, space] of spaces.entries()) {
+    space.signals.push(broadcastEvent);
+    if (space.signals.length > 50) space.signals.shift();
+    broadcastToSpace(spaceId, "SIGNAL_RECEIVED", broadcastEvent);
+    broadcastToSpace(spaceId, "SYSTEM_ANNOUNCEMENT", {
+      title: title || "اطلاعیه سراسری مدیر ارشد",
+      message,
+      senderName,
+      timestamp: Date.now(),
+    });
+    broadcastCount++;
+
+    sendPushNotificationToSpace(
+      spaceId,
+      {
+        senderName: `${senderName} (مدیر ارشد)`,
+        waveName: "پیام سراسری",
+        waveEmoji: "👑",
+        intensityPct: 100,
+        symbolMeaning: title || "اطلاعیه اسکالا",
+        privateIntention: message,
+      }
+    );
+  }
+
+  saveSpacesToDisk();
+
+  res.json({
+    success: true,
+    message: "پیام همگانی با موفقیت به تمام فضاها ارسال شد",
+    reachedSpacesCount: broadcastCount,
+  });
+});
+
+// Test live MySQL connection directly from Admin Panel
+app.post("/api/admin/test-mysql", requireAdmin, async (req: AuthRequest, res: Response) => {
+  const { host, port, user, password, database } = req.body;
+  try {
+    const testPool = (await import("mysql2/promise")).default.createPool({
+      host: host || process.env.DB_HOST || "localhost",
+      port: parseInt(port || process.env.DB_PORT || "3306", 10),
+      user: user || process.env.DB_USER || "root",
+      password: password !== undefined ? password : (process.env.DB_PASSWORD || ""),
+      database: database || process.env.DB_NAME || "skala_db",
+      connectTimeout: 5000,
+    });
+
+    const conn = await testPool.getConnection();
+    const [rows]: any = await conn.query("SELECT 1 + 1 AS testResult, VERSION() AS mysqlVersion");
+    conn.release();
+    await testPool.end();
+
+    res.json({
+      success: true,
+      message: "اتصال به پایگاه داده MySQL با موفقیت برقرار شد!",
+      version: rows[0]?.mysqlVersion || "MySQL 8.x / MariaDB",
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      success: false,
+      error: err.message || "خطا در اتصال به سرور MySQL",
+    });
+  }
+});
+
+// Download/Get MySQL SQL dump
+app.get("/api/admin/export/sql", requireAdmin, (_req: AuthRequest, res: Response) => {
+  const sqlPath = path.join(process.cwd(), "skala_database.sql");
+  if (fs.existsSync(sqlPath)) {
+    const sql = fs.readFileSync(sqlPath, "utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="skala_database.sql"');
+    res.setHeader("Content-Type", "application/sql; charset=utf-8");
+    return res.send(sql);
+  }
+  res.status(404).json({ error: "فایل اسکریپت دیتابیس یافت نشد" });
+});
+
+// Full JSON Backup Export
+app.get("/api/admin/export/json", requireAdmin, (_req: AuthRequest, res: Response) => {
+  const backup = {
+    exportedAt: Date.now(),
+    version: "1.0.0",
+    users: Array.from(users.values()),
+    spaces: Array.from(spaces.values()).map((s) => ({
+      ...s,
+      participants: Array.from(s.participants.values()),
+    })),
+    tapLoops: Object.fromEntries(sharedTapLoops.entries()),
+  };
+
+  res.setHeader("Content-Disposition", 'attachment; filename="skala_backup.json"');
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.json(backup);
+});
+
+// 13. Health Check
 app.get("/api/health", (_req, res) => {
+  const mysqlStatus = getMySQLStatus();
   res.json({
     status: "ok",
     product: "SKALA",
+    database: mysqlStatus.isConnected ? "MySQL" : "Local Disk Storage",
     activeSpaces: spaces.size,
     registeredUsers: users.size,
     activeSessions: sessions.size,
+    uptimeSeconds: Math.floor((Date.now() - SERVER_START_TIME) / 1000),
   });
 });
 
 // Vite & Static server
 async function startServer() {
+  // Initialize MySQL pool asynchronously
+  initMySQLPool().catch((err) => {
+    console.warn("[SKALA Server] MySQL init background error:", err);
+  });
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },

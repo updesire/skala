@@ -31,10 +31,12 @@ import { CirclesManagerModal } from './components/CirclesManagerModal';
 import { IncomingSignalOverlay } from './components/IncomingSignalOverlay';
 import { SoundAtmosphereToggle } from './components/SoundAtmosphereToggle';
 import { SensoryTapLoopRecorderModal } from './components/SensoryTapLoopRecorderModal';
+import { AdminPanelModal } from './components/AdminPanelModal';
+import { AuthModal } from './components/AuthModal';
 import { ambientAudio } from './services/audio';
 import { spaceSync } from './services/spaceSync';
 import { subscribeToPush, getNotificationPermission } from './services/pushNotification';
-import { History, Radio, UserCheck, Languages, UserPlus, Share2, ShieldCheck, MoreHorizontal, Menu, X, Bell, BellRing, Layers, Crown, Music } from 'lucide-react';
+import { History, Radio, UserCheck, Languages, UserPlus, Share2, ShieldCheck, MoreHorizontal, Menu, X, Bell, BellRing, Layers, Crown, Music, LogIn, KeyRound } from 'lucide-react';
 import { LanguageProvider, useLanguage } from './context/LanguageContext';
 
 function MainAppContent() {
@@ -256,6 +258,43 @@ function MainAppContent() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState<boolean>(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [showAccessibilityLabels, setShowAccessibilityLabels] = useState<boolean>(false);
+  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState<boolean>(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [authModalInitialMode, setAuthModalInitialMode] = useState<'login' | 'register'>('login');
+
+  // Auto restore real session from server
+  useEffect(() => {
+    const token = localStorage.getItem('skala_session_token');
+    if (token) {
+      fetch('/api/auth/me', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'x-session-token': token,
+        },
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.authenticated && data.user) {
+            setUser((prev) => ({
+              ...prev,
+              id: data.user.id,
+              name: data.user.name,
+              email: data.user.email,
+              role: data.user.role,
+              isAdmin: data.user.isAdmin,
+              isSuperAdmin: data.user.isSuperAdmin,
+              color: data.user.color || prev.color,
+              presence: data.user.presence || prev.presence,
+              texture: data.user.texture || prev.texture,
+              breathRate: data.user.breathRate || prev.breathRate,
+            }));
+            setIsRegistered(true);
+            localStorage.setItem('aetheria_user_registered', 'true');
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
 
   // Idea 3 & 5: Co-Touch Resonance & Custom Tap Loops State
   const [isCoTouchActive, setIsCoTouchActive] = useState<boolean>(false);
@@ -1016,6 +1055,39 @@ function MainAppContent() {
 
           {/* Desktop Toolbar Icons (Visible on sm and up) */}
           <div className="hidden sm:flex items-center gap-1.5 sm:gap-2">
+            {/* Super Admin Panel Button (Exclusive for soraun.com@gmail.com and Super Admins) */}
+            {(user.role === 'super_admin' || user.isSuperAdmin || user.email?.toLowerCase() === 'soraun.com@gmail.com') && (
+              <button
+                id="btn-open-admin-panel"
+                onClick={() => setIsAdminPanelOpen(true)}
+                className="px-3.5 py-2 rounded-full bg-gradient-to-r from-amber-500/30 to-amber-400/20 hover:from-amber-500/45 hover:to-amber-400/35 text-amber-300 border border-amber-400/50 backdrop-blur-md transition-all flex items-center gap-1.5 cursor-pointer shadow-lg shadow-amber-500/10 hover:scale-105 active:scale-95 animate-pulse"
+                title={language === 'fa' ? 'پنل مدیریت ارشد کل سیستم (MySQL & Host)' : 'Super Admin Master Panel'}
+                aria-label="Open Super Admin Panel"
+              >
+                <Crown className="w-4 h-4 text-amber-300 fill-amber-300/30" />
+                <span className="text-[11px] font-bold tracking-wide">
+                  {language === 'fa' ? 'پنل مدیریت ارشد' : 'Admin Panel'}
+                </span>
+              </button>
+            )}
+
+            {/* User Real Login / Auth Account Button */}
+            <button
+              id="btn-open-auth-modal"
+              onClick={() => {
+                setAuthModalInitialMode('login');
+                setIsAuthModalOpen(true);
+              }}
+              className="px-3 py-2 rounded-full bg-white/10 hover:bg-white/15 text-zinc-200 hover:text-white border border-white/15 backdrop-blur-md transition-all flex items-center gap-1.5 cursor-pointer shadow-md hover:scale-105 active:scale-95"
+              title={language === 'fa' ? 'ورود به حساب کاربری / ثبت‌نام' : 'Sign In / Account'}
+              aria-label="Sign In or Switch Account"
+            >
+              <LogIn className="w-3.5 h-3.5 text-cyan-300" />
+              <span className="text-[11px] font-medium tracking-wide">
+                {user.email ? user.name || user.email.split('@')[0] : (language === 'fa' ? 'ورود' : 'Sign In')}
+              </span>
+            </button>
+
             {/* Circles & Groups Manager Button */}
             <button
               id="btn-open-circles"
@@ -1124,6 +1196,36 @@ function MainAppContent() {
                     isRtl ? 'left-0' : 'right-0'
                   } w-56 max-w-[calc(100vw-20px)] p-2 rounded-2xl bg-zinc-950/95 border border-white/15 backdrop-blur-xl shadow-2xl flex flex-col gap-1 z-50 animate-fade-in`}
                 >
+                  {/* Super Admin Panel (Mobile) */}
+                  {(user.role === 'super_admin' || user.isSuperAdmin || user.email?.toLowerCase() === 'soraun.com@gmail.com') && (
+                    <button
+                      onClick={() => {
+                        setIsAdminPanelOpen(true);
+                        setIsMobileMenuOpen(false);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-amber-400/20 hover:bg-amber-400/30 text-xs text-amber-300 transition-colors text-start font-semibold border border-amber-400/40"
+                    >
+                      <Crown className="w-4 h-4 text-amber-300 shrink-0" />
+                      <span className="flex-1">{language === 'fa' ? 'پنل مدیریت ارشد کل' : 'Super Admin Panel'}</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-400/30 text-amber-200 font-bold">
+                        👑 Master
+                      </span>
+                    </button>
+                  )}
+
+                  {/* Login / Auth Modal (Mobile) */}
+                  <button
+                    onClick={() => {
+                      setAuthModalInitialMode('login');
+                      setIsAuthModalOpen(true);
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-white/10 text-xs text-zinc-200 transition-colors text-start"
+                  >
+                    <LogIn className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <span>{user.email ? (language === 'fa' ? `حساب: ${user.name}` : `Account: ${user.name}`) : (language === 'fa' ? 'ورود / ثبت‌نام' : 'Sign In / Register')}</span>
+                  </button>
+
                   {/* Sensory Tap Studio */}
                   <button
                     onClick={() => {
@@ -1369,6 +1471,35 @@ function MainAppContent() {
             currentSpaceId={spaceId}
             onSwitchSpace={handleSwitchCircle}
             onUpdateUser={handleUpdateUser}
+          />
+        )}
+
+        {/* Master Super Admin Panel Modal */}
+        {isAdminPanelOpen && (
+          <AdminPanelModal
+            onClose={() => setIsAdminPanelOpen(false)}
+            currentUserEmail={user.email}
+            onOpenSpace={(sId) => handleSwitchCircle(sId, sId, true)}
+          />
+        )}
+
+        {/* Authentication (Login & Real Registration) Modal */}
+        {isAuthModalOpen && (
+          <AuthModal
+            currentUser={user}
+            initialMode={authModalInitialMode}
+            onLoginSuccess={(loggedUser, _token) => {
+              setUser((prev) => ({
+                ...prev,
+                ...loggedUser,
+                id: loggedUser.id || prev.id,
+              }));
+              setIsRegistered(true);
+              localStorage.setItem('aetheria_user_registered', 'true');
+              localStorage.setItem('aetheria_user_identity', JSON.stringify({ ...user, ...loggedUser }));
+              ambientAudio.playSignalResonance(0.9);
+            }}
+            onClose={() => setIsAuthModalOpen(false)}
           />
         )}
       </AnimatePresence>

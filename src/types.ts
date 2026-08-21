@@ -160,14 +160,42 @@ export interface TouchRipple {
   birth: number;
 }
 
-export interface SpaceSession {
-  spaceId: string;
-  spaceName: string;
+export interface AdminUserRecord {
+  id: string;
+  email: string;
+  name: string;
+  role: 'user' | 'admin' | 'super_admin';
+  createdAt: number;
+  lastSeen?: number;
+  texture?: string;
+  presence?: string;
+  color?: OrbColor;
+}
+
+export interface AdminSpaceRecord {
+  id: string;
+  name: string;
+  description?: string;
   hostName: string;
+  hostEmail?: string;
   hostId: string;
-  isAdmin: boolean;
-  isRealPeopleOnly: boolean;
-  connectedCount: number;
+  createdAt: number;
+  memberCount: number;
+  signalsCount?: number;
+}
+
+export interface AdminStatsOverview {
+  databaseType: 'mysql' | 'local_file';
+  mysqlConnected: boolean;
+  dbHost?: string;
+  dbName?: string;
+  totalUsers: number;
+  totalSpaces: number;
+  totalSignals: number;
+  totalPushSubscriptions: number;
+  activeOnlineUsers: number;
+  serverUptimeSeconds: number;
+  superAdminEmail: string;
 }
 
 export interface TravelingSignal {
