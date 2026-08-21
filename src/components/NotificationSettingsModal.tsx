@@ -93,8 +93,8 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
       } else if (result.error === 'permission_denied') {
         setStatusMessage({
           text: isRtl
-            ? 'مجوز اعلان رد شده است. لطفاً در تنظیمات آیفون (Settings > Notifications > Aetheria) اجازه دریافت اعلان را فعال کنید.'
-            : 'Permission was denied. Please allow notifications in iPhone Settings > Notifications > Aetheria.',
+            ? 'مجوز اعلان رد شده است. لطفاً در تنظیمات آیفون (Settings > Notifications > SKALA) اجازه دریافت اعلان را فعال کنید.'
+            : 'Permission was denied. Please allow notifications in iPhone Settings > Notifications > SKALA.',
           type: 'error',
         });
       } else {
@@ -122,7 +122,7 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
   const handleDirectLocalTest = async () => {
     setIsLoading(true);
     const res = await showDirectLocalNotification(
-      isRtl ? `Aetheria • سیگنال از ${userName || 'دوست شما'}` : `Aetheria • Signal from ${userName || 'Friend'}`,
+      isRtl ? `SKALA • سیگنال از ${userName || 'دوست شما'}` : `SKALA • Signal from ${userName || 'Friend'}`,
       isRtl ? 'یک پیام ارتعاشی و حضور ملایم ارسال شد ✨' : 'A gentle presence resonance was sent ✨'
     );
     setIsLoading(false);

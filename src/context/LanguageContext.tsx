@@ -14,13 +14,13 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Default to Persian (fa) or saved preference
   const [language, setLanguageState] = useState<Language>(() => {
-    const saved = localStorage.getItem('aetheria_lang') as Language;
+    const saved = (localStorage.getItem('skala_lang') || localStorage.getItem('aetheria_lang')) as Language;
     return saved === 'en' ? 'en' : 'fa';
   });
 
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
-    localStorage.setItem('aetheria_lang', lang);
+    localStorage.setItem('skala_lang', lang);
   };
 
   const toggleLanguage = () => {

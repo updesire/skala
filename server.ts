@@ -1,10 +1,11 @@
-import express, { Request, Response } from "express";
+import express, { Request, Response, NextFunction } from "express";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
 import { createServer as createViteServer } from "vite";
 import webpush from "web-push";
 
-interface Participant {
+export interface Participant {
   id: string;
   name: string;
   relationship?: string;
@@ -19,6 +20,8 @@ interface Participant {
   breathRate: number;
   bioSnippet?: string;
   isAdmin?: boolean;
+  isSuperAdmin?: boolean;
+  role?: 'user' | 'admin' | 'super_admin';
   lastSeen: number;
   x?: number;
   y?: number;
@@ -26,7 +29,7 @@ interface Participant {
   distance?: number;
 }
 
-interface TapPoint {
+export interface TapPoint {
   id?: string;
   time: number;
   x: number;
@@ -35,7 +38,7 @@ interface TapPoint {
   pitchFreq?: number;
 }
 
-interface CustomTapLoop {
+export interface CustomTapLoop {
   id: string;
   name: string;
   description?: string;
@@ -49,7 +52,7 @@ interface CustomTapLoop {
   targetPersonId?: string;
 }
 
-interface SignalEvent {
+export interface SignalEvent {
   id: string;
   senderId: string;
   senderName: string;
@@ -60,11 +63,12 @@ interface SignalEvent {
   color: string;
   privateIntention?: string;
   symbolMeaning?: string;
+  sourceType?: 'gesture' | 'tap_loop' | 'resonance' | 'biometric_rhythm';
   customTapLoop?: CustomTapLoop;
   timestamp: number;
 }
 
-interface PushSubscriptionRecord {
+export interface PushSubscriptionRecord {
   endpoint: string;
   keys: {
     p256dh: string;
@@ -72,10 +76,30 @@ interface PushSubscriptionRecord {
   };
   userId: string;
   spaceId: string;
+  privacyLevel?: 'normal' | 'private' | 'generic';
   createdAt: number;
 }
 
-interface SpaceState {
+export interface UserAccount {
+  id: string;
+  email: string;
+  name: string;
+  role: 'user' | 'admin' | 'super_admin';
+  createdAt: number;
+  color: any;
+  texture: string;
+  presence: string;
+}
+
+export interface UserSession {
+  token: string;
+  userId: string;
+  role: 'user' | 'admin' | 'super_admin';
+  createdAt: number;
+  expiresAt: number;
+}
+
+export interface SpaceState {
   id: string;
   name: string;
   description?: string;
@@ -92,30 +116,75 @@ const PORT = 3000;
 
 app.use(express.json());
 
-// In-memory real-time state for spaces
-const spaces = new Map<string, SpaceState>();
-
-// Pre-populate Master Default Circle
-const DEFAULT_MASTER_SPACE_ID = "main-cosmic-circle";
-spaces.set(DEFAULT_MASTER_SPACE_ID, {
-  id: DEFAULT_MASTER_SPACE_ID,
-  name: "حلقه اصلی آتریا • Aetheria Sanctuary",
-  description: "فضای مرکزی و کیهانی حضور آرامش‌بخش",
-  hostName: "مدیر ارشد (soraun)",
-  hostEmail: "soraun.com@gmail.com",
-  hostId: "host-superadmin",
-  createdAt: Date.now() - 86400000,
-  participants: new Map(),
-  signals: [],
-});
-// Active SSE connections: spaceId -> Set of Response objects
-const sseClients = new Map<string, Set<{ res: Response; userId: string }>>();
-// Push Subscriptions: spaceId -> Map<endpoint, PushSubscriptionRecord>
-const pushSubscriptions = new Map<string, Map<string, PushSubscriptionRecord>>();
-const SUBSCRIPTIONS_FILE = path.join(process.cwd(), ".push-subscriptions.json");
-
-function loadPushSubscriptions() {
+// Disk storage paths for PostgreSQL-compatible persistence layer
+const DATA_DIR = path.join(process.cwd(), ".data");
+if (!fs.existsSync(DATA_DIR)) {
   try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  } catch {}
+}
+
+const USERS_FILE = path.join(DATA_DIR, "users.json");
+const SESSIONS_FILE = path.join(DATA_DIR, "sessions.json");
+const SPACES_FILE = path.join(DATA_DIR, "spaces.json");
+const SUBSCRIPTIONS_FILE = path.join(DATA_DIR, "push-subscriptions.json");
+const TAP_LOOPS_FILE = path.join(DATA_DIR, "tap-loops.json");
+
+// In-memory caches backed by disk persistence
+const users = new Map<string, UserAccount>(); // email -> UserAccount
+const usersById = new Map<string, UserAccount>(); // id -> UserAccount
+const sessions = new Map<string, UserSession>(); // token -> UserSession
+const spaces = new Map<string, SpaceState>(); // spaceId -> SpaceState
+const pushSubscriptions = new Map<string, Map<string, PushSubscriptionRecord>>(); // spaceId -> Map<endpoint, sub>
+const sharedTapLoops = new Map<string, CustomTapLoop[]>(); // spaceId -> CustomTapLoop[]
+const sseClients = new Map<string, Set<{ res: Response; userId: string }>>();
+
+const SUPER_ADMIN_EMAIL = "soraun.com@gmail.com";
+const DEFAULT_MASTER_SPACE_ID = "main-cosmic-circle";
+
+// Persistence load functions
+function loadDataFromDisk() {
+  try {
+    // 1. Users
+    if (fs.existsSync(USERS_FILE)) {
+      const raw = fs.readFileSync(USERS_FILE, "utf-8");
+      const list: UserAccount[] = JSON.parse(raw);
+      for (const u of list) {
+        users.set(u.email.toLowerCase(), u);
+        usersById.set(u.id, u);
+      }
+    }
+
+    // 2. Sessions
+    if (fs.existsSync(SESSIONS_FILE)) {
+      const raw = fs.readFileSync(SESSIONS_FILE, "utf-8");
+      const list: UserSession[] = JSON.parse(raw);
+      const now = Date.now();
+      for (const s of list) {
+        if (s.expiresAt > now) {
+          sessions.set(s.token, s);
+        }
+      }
+    }
+
+    // 3. Spaces
+    if (fs.existsSync(SPACES_FILE)) {
+      const raw = fs.readFileSync(SPACES_FILE, "utf-8");
+      const list: Array<Omit<SpaceState, "participants"> & { participants: Participant[] }> = JSON.parse(raw);
+      for (const s of list) {
+        const pMap = new Map<string, Participant>();
+        for (const p of s.participants || []) {
+          pMap.set(p.id, p);
+        }
+        spaces.set(s.id, {
+          ...s,
+          participants: pMap,
+          signals: s.signals || [],
+        });
+      }
+    }
+
+    // 4. Push Subscriptions
     if (fs.existsSync(SUBSCRIPTIONS_FILE)) {
       const raw = fs.readFileSync(SUBSCRIPTIONS_FILE, "utf-8");
       const data: Record<string, PushSubscriptionRecord[]> = JSON.parse(raw);
@@ -131,142 +200,153 @@ function loadPushSubscriptions() {
         }
       }
     }
+
+    // 5. Tap Loops
+    if (fs.existsSync(TAP_LOOPS_FILE)) {
+      const raw = fs.readFileSync(TAP_LOOPS_FILE, "utf-8");
+      const data: Record<string, CustomTapLoop[]> = JSON.parse(raw);
+      for (const [spaceId, loops] of Object.entries(data)) {
+        sharedTapLoops.set(spaceId, loops);
+      }
+    }
   } catch (err) {
-    console.warn("Failed to load push subscriptions:", err);
+    console.warn("[SKALA Server] Data load error:", err);
+  }
+
+  // Ensure default master space exists
+  if (!spaces.has(DEFAULT_MASTER_SPACE_ID)) {
+    spaces.set(DEFAULT_MASTER_SPACE_ID, {
+      id: DEFAULT_MASTER_SPACE_ID,
+      name: "حلقه اصلی اسکالا • SKALA Sanctuary",
+      description: "فضای مرکزی و کیهانی حضور آرامش‌بخش",
+      hostName: "مدیر ارشد (soraun)",
+      hostEmail: SUPER_ADMIN_EMAIL,
+      hostId: "host-superadmin",
+      createdAt: Date.now() - 86400000,
+      participants: new Map(),
+      signals: [],
+    });
+    saveSpacesToDisk();
   }
 }
 
-function savePushSubscriptions() {
+function saveUsersToDisk() {
+  try {
+    fs.writeFileSync(USERS_FILE, JSON.stringify(Array.from(users.values()), null, 2));
+  } catch {}
+}
+
+function saveSessionsToDisk() {
+  try {
+    fs.writeFileSync(SESSIONS_FILE, JSON.stringify(Array.from(sessions.values()), null, 2));
+  } catch {}
+}
+
+function saveSpacesToDisk() {
+  try {
+    const list = Array.from(spaces.values()).map((s) => ({
+      ...s,
+      participants: Array.from(s.participants.values()),
+    }));
+    fs.writeFileSync(SPACES_FILE, JSON.stringify(list, null, 2));
+  } catch {}
+}
+
+function savePushSubscriptionsToDisk() {
   try {
     const data: Record<string, PushSubscriptionRecord[]> = {};
     for (const [spaceId, map] of pushSubscriptions.entries()) {
       data[spaceId] = Array.from(map.values());
     }
-    fs.writeFileSync(SUBSCRIPTIONS_FILE, JSON.stringify(data, null, 2), "utf-8");
-  } catch (err) {
-    console.warn("Failed to save push subscriptions:", err);
-  }
+    fs.writeFileSync(SUBSCRIPTIONS_FILE, JSON.stringify(data, null, 2));
+  } catch {}
 }
 
-loadPushSubscriptions();
+function saveTapLoopsToDisk() {
+  try {
+    const data: Record<string, CustomTapLoop[]> = {};
+    for (const [spaceId, loops] of sharedTapLoops.entries()) {
+      data[spaceId] = loops;
+    }
+    fs.writeFileSync(TAP_LOOPS_FILE, JSON.stringify(data, null, 2));
+  } catch {}
+}
 
-// VAPID Keys setup for iOS / Web Push
-const VAPID_KEY_FILE = path.join(process.cwd(), ".vapid-keys.json");
+loadDataFromDisk();
+
+// VAPID Keys setup for Push Notifications
+const VAPID_KEY_FILE = path.join(DATA_DIR, "vapid-keys.json");
 let vapidKeys: { publicKey: string; privateKey: string };
 
 try {
   if (fs.existsSync(VAPID_KEY_FILE)) {
-    const raw = fs.readFileSync(VAPID_KEY_FILE, "utf-8");
-    vapidKeys = JSON.parse(raw);
+    vapidKeys = JSON.parse(fs.readFileSync(VAPID_KEY_FILE, "utf-8"));
   } else {
     vapidKeys = webpush.generateVAPIDKeys();
-    fs.writeFileSync(VAPID_KEY_FILE, JSON.stringify(vapidKeys, null, 2), "utf-8");
+    fs.writeFileSync(VAPID_KEY_FILE, JSON.stringify(vapidKeys, null, 2));
   }
 } catch {
   vapidKeys = webpush.generateVAPIDKeys();
 }
 
-const VAPID_SUBJECT = "mailto:soraun.com@gmail.com";
+const VAPID_SUBJECT = `mailto:${SUPER_ADMIN_EMAIL}`;
 webpush.setVapidDetails(VAPID_SUBJECT, vapidKeys.publicKey, vapidKeys.privateKey);
 
-async function sendPushNotificationToSpace(
-  spaceId: string,
-  payload: { title: string; body: string; data?: any },
-  excludeUserId?: string,
-  targetRecipientId?: string
-) {
-  // Collect all relevant subscriptions from target space and fallback to default space
-  let targetSubs: PushSubscriptionRecord[] = [];
-  const spaceSubs = pushSubscriptions.get(spaceId);
-  if (spaceSubs && spaceSubs.size > 0) {
-    targetSubs.push(...Array.from(spaceSubs.values()));
-  }
-
-  // Also include subscriptions from the master circle if different
-  if (spaceId !== DEFAULT_MASTER_SPACE_ID && pushSubscriptions.has(DEFAULT_MASTER_SPACE_ID)) {
-    const masterSubs = pushSubscriptions.get(DEFAULT_MASTER_SPACE_ID)!;
-    for (const sub of masterSubs.values()) {
-      if (!targetSubs.some((s) => s.endpoint === sub.endpoint)) {
-        targetSubs.push(sub);
-      }
-    }
-  }
-
-  // Also include any global registered subscription if no other candidates found
-  if (targetSubs.length === 0) {
-    for (const map of pushSubscriptions.values()) {
-      for (const sub of map.values()) {
-        if (!targetSubs.some((s) => s.endpoint === sub.endpoint)) {
-          targetSubs.push(sub);
-        }
-      }
-    }
-  }
-
-  if (targetSubs.length === 0) return;
-
-  const payloadString = JSON.stringify({
-    title: payload.title,
-    body: payload.body,
-    icon: "/icon.svg",
-    badge: "/icon.svg",
-    data: payload.data || { url: `/?space=${spaceId}`, spaceId },
-  });
-
-  // Check if targetRecipientId matches any specific subscriber exactly
-  const hasExactRecipient =
-    targetRecipientId &&
-    targetSubs.some((s) => s.userId && s.userId.toLowerCase() === targetRecipientId.toLowerCase());
-
-  let hasDeadEndpoints = false;
-
-  for (const sub of targetSubs) {
-    // Skip sender's own device
-    if (excludeUserId && sub.userId && sub.userId.toLowerCase() === excludeUserId.toLowerCase()) {
-      continue;
-    }
-
-    // If an exact recipient exists and matches, send only to them; otherwise send to all in space
-    if (hasExactRecipient && sub.userId && sub.userId.toLowerCase() !== targetRecipientId!.toLowerCase()) {
-      continue;
-    }
-
-    try {
-      await webpush.sendNotification(
-        {
-          endpoint: sub.endpoint,
-          keys: {
-            p256dh: sub.keys.p256dh,
-            auth: sub.keys.auth,
-          },
-        },
-        payloadString,
-        {
-          TTL: 86400, // 24 hours delivery guarantee
-          urgency: "high",
-          headers: {
-            Topic: "presence-signal",
-          },
-        }
-      );
-    } catch (err: any) {
-      console.warn("Push delivery error for endpoint:", sub.endpoint, err?.statusCode || err?.message);
-      // 404 or 410 means subscription expired or was revoked by iOS APNs
-      if (err.statusCode === 404 || err.statusCode === 410) {
-        for (const map of pushSubscriptions.values()) {
-          map.delete(sub.endpoint);
-        }
-        hasDeadEndpoints = true;
-      }
-    }
-  }
-
-  if (hasDeadEndpoints) {
-    savePushSubscriptions();
-  }
+// Authentication & Authorization Helper Functions & Middlewares
+export interface AuthRequest extends Request {
+  user?: UserAccount;
+  sessionToken?: string;
 }
 
-const SUPER_ADMIN_EMAIL = "soraun.com@gmail.com";
+function authenticate(req: AuthRequest, _res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+  const headerToken = authHeader?.startsWith("Bearer ") ? authHeader.substring(7) : null;
+  const customHeader = (req.headers["x-session-token"] as string) || null;
+  const queryToken = (req.query.sessionToken as string) || null;
+
+  const token = headerToken || customHeader || queryToken;
+  if (token && sessions.has(token)) {
+    const session = sessions.get(token)!;
+    if (session.expiresAt > Date.now()) {
+      const user = usersById.get(session.userId);
+      if (user) {
+        req.user = user;
+        req.sessionToken = token;
+      }
+    }
+  }
+  next();
+}
+
+function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
+  if (!req.user) {
+    return res.status(401).json({ error: "احراز هویت الزامی است" });
+  }
+  next();
+}
+
+function requireAdmin(req: AuthRequest, res: Response, next: NextFunction) {
+  if (!req.user || (req.user.role !== "admin" && req.user.role !== "super_admin")) {
+    return res.status(403).json({ error: "دسترسی مجاز نیست" });
+  }
+  next();
+}
+
+app.use(authenticate);
+
+function generateSecureSession(user: UserAccount): UserSession {
+  const token = `skala_sess_${crypto.randomBytes(32).toString("hex")}`;
+  const session: UserSession = {
+    token,
+    userId: user.id,
+    role: user.role,
+    createdAt: Date.now(),
+    expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000, // 30 days
+  };
+  sessions.set(token, session);
+  saveSessionsToDisk();
+  return session;
+}
 
 function isSuperAdminEmail(email?: string): boolean {
   if (!email) return false;
@@ -292,6 +372,7 @@ function getOrCreateSpace(
       participants: new Map(),
       signals: [],
     });
+    saveSpacesToDisk();
   }
   const s = spaces.get(spaceId)!;
   if (hostEmail && !s.hostEmail) {
@@ -317,10 +398,109 @@ function broadcastToSpace(spaceId: string, type: string, data: any) {
   }
 }
 
-// Clean up stale participants every 15 seconds
+// Push notification sender with Privacy Mode support
+async function sendPushNotificationToSpace(
+  spaceId: string,
+  payload: {
+    senderName: string;
+    waveName: string;
+    waveEmoji: string;
+    intensityPct: number;
+    symbolMeaning?: string;
+    privateIntention?: string;
+    data?: any;
+  },
+  excludeUserId?: string,
+  targetRecipientId?: string
+) {
+  let targetSubs: PushSubscriptionRecord[] = [];
+  const spaceSubs = pushSubscriptions.get(spaceId);
+  if (spaceSubs && spaceSubs.size > 0) {
+    targetSubs.push(...Array.from(spaceSubs.values()));
+  }
+
+  if (spaceId !== DEFAULT_MASTER_SPACE_ID && pushSubscriptions.has(DEFAULT_MASTER_SPACE_ID)) {
+    const masterSubs = pushSubscriptions.get(DEFAULT_MASTER_SPACE_ID)!;
+    for (const sub of masterSubs.values()) {
+      if (!targetSubs.some((s) => s.endpoint === sub.endpoint)) {
+        targetSubs.push(sub);
+      }
+    }
+  }
+
+  if (targetSubs.length === 0) return;
+
+  const hasExactRecipient =
+    targetRecipientId &&
+    targetSubs.some((s) => s.userId && s.userId.toLowerCase() === targetRecipientId.toLowerCase());
+
+  let hasDeadEndpoints = false;
+
+  for (const sub of targetSubs) {
+    if (excludeUserId && sub.userId && sub.userId.toLowerCase() === excludeUserId.toLowerCase()) {
+      continue;
+    }
+
+    if (hasExactRecipient && sub.userId && sub.userId.toLowerCase() !== targetRecipientId!.toLowerCase()) {
+      continue;
+    }
+
+    // Privacy-aware notification titles and bodies
+    let title = `${payload.senderName} • ${payload.waveName} ${payload.waveEmoji}`;
+    let body = payload.symbolMeaning
+      ? `امضای «${payload.symbolMeaning}» (${payload.intensityPct}٪)`
+      : `سیگنال «${payload.waveName}» با شدت ${payload.intensityPct}٪`;
+
+    if (sub.privacyLevel === "generic" || sub.privacyLevel === "private") {
+      title = "SKALA • حضور آرامش‌بخش";
+      body = "یک حضور تازه منتظر توست ✨";
+    }
+
+    const payloadString = JSON.stringify({
+      title,
+      body,
+      icon: "/icon.svg",
+      badge: "/icon.svg",
+      data: payload.data || { url: `/?space=${spaceId}`, spaceId },
+    });
+
+    try {
+      await webpush.sendNotification(
+        {
+          endpoint: sub.endpoint,
+          keys: {
+            p256dh: sub.keys.p256dh,
+            auth: sub.keys.auth,
+          },
+        },
+        payloadString,
+        {
+          TTL: 86400,
+          urgency: "high",
+          headers: {
+            Topic: "presence-signal",
+          },
+        }
+      );
+    } catch (err: any) {
+      if (err.statusCode === 404 || err.statusCode === 410) {
+        for (const map of pushSubscriptions.values()) {
+          map.delete(sub.endpoint);
+        }
+        hasDeadEndpoints = true;
+      }
+    }
+  }
+
+  if (hasDeadEndpoints) {
+    savePushSubscriptionsToDisk();
+  }
+}
+
+// Clean up stale participants every 20 seconds
 setInterval(() => {
   const now = Date.now();
-  const timeoutMs = 45000; // 45 seconds timeout
+  const timeoutMs = 45000;
 
   for (const [spaceId, space] of spaces.entries()) {
     let changed = false;
@@ -334,13 +514,16 @@ setInterval(() => {
       broadcastToSpace(spaceId, "MEMBERS_UPDATED", {
         participants: Array.from(space.participants.values()),
       });
+      saveSpacesToDisk();
     }
   }
-}, 15000);
+}, 20000);
 
-// API Endpoints
+// ==========================================
+// API ENDPOINTS
+// ==========================================
 
-// 0. User Registration / Auth with Email
+// 1. User Registration & Secure Auth
 app.post("/api/auth/register", (req: Request, res: Response) => {
   const { name, email, color, texture, presence } = req.body;
   if (!name || !email) {
@@ -348,34 +531,83 @@ app.post("/api/auth/register", (req: Request, res: Response) => {
   }
 
   const cleanEmail = email.trim().toLowerCase();
-  const isSuperAdmin = cleanEmail === SUPER_ADMIN_EMAIL.toLowerCase();
+  const isSuper = isSuperAdminEmail(cleanEmail);
+  const role: 'user' | 'admin' | 'super_admin' = isSuper ? "super_admin" : "admin";
+
+  let user = users.get(cleanEmail);
+  if (!user) {
+    user = {
+      id: `user-${crypto.randomBytes(6).toString("hex")}`,
+      name: name.trim(),
+      email: cleanEmail,
+      role,
+      createdAt: Date.now(),
+      color: color || {
+        name: isSuper ? "Solar Amber" : "Celestial Cyan",
+        primary: isSuper ? "#f59e0b" : "#0ea5e9",
+        glow: isSuper ? "rgba(245, 158, 11, 0.65)" : "rgba(14, 165, 233, 0.65)",
+        ambient: isSuper ? "rgba(245, 158, 11, 0.18)" : "rgba(14, 165, 233, 0.18)",
+        accent: isSuper ? "#fbbf24" : "#38bdf8",
+      },
+      texture: texture || (isSuper ? "aurora" : "fluid"),
+      presence: presence || "present",
+    };
+    users.set(cleanEmail, user);
+    usersById.set(user.id, user);
+    saveUsersToDisk();
+  } else {
+    user.name = name.trim();
+    if (color) user.color = color;
+    if (texture) user.texture = texture;
+    user.role = role;
+    saveUsersToDisk();
+  }
+
+  const session = generateSecureSession(user);
 
   res.json({
     success: true,
+    sessionToken: session.token,
     user: {
-      id: `user-${cleanEmail.replace(/[^a-z0-9]/g, "-")}`,
-      name: name.trim(),
-      email: cleanEmail,
-      isAdmin: true, // admin of their own circles
-      isSuperAdmin,  // global super admin if soraun.com@gmail.com
-      color: color || {
-        name: isSuperAdmin ? "Solar Amber" : "Celestial Cyan",
-        primary: isSuperAdmin ? "#f59e0b" : "#0ea5e9",
-        glow: isSuperAdmin ? "rgba(245, 158, 11, 0.65)" : "rgba(14, 165, 233, 0.65)",
-        ambient: isSuperAdmin ? "rgba(245, 158, 11, 0.18)" : "rgba(14, 165, 233, 0.18)",
-        accent: isSuperAdmin ? "#fbbf24" : "#38bdf8",
-      },
-      presence: presence || "present",
-      texture: texture || (isSuperAdmin ? "aurora" : "fluid"),
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      isAdmin: user.role === "admin" || user.role === "super_admin",
+      isSuperAdmin: user.role === "super_admin",
+      role: user.role,
+      color: user.color,
+      presence: user.presence,
+      texture: user.texture,
       motionPersonality: "meditative",
       breathRate: 4.5,
     },
   });
 });
 
-// 0.1 List All Circles
-app.get("/api/circles", (req: Request, res: Response) => {
-  const { userEmail } = req.query;
+// 2. Get Current Auth Status
+app.get("/api/auth/me", (req: AuthRequest, res: Response) => {
+  if (!req.user) {
+    return res.json({ authenticated: false });
+  }
+
+  res.json({
+    authenticated: true,
+    user: {
+      id: req.user.id,
+      name: req.user.name,
+      email: req.user.email,
+      role: req.user.role,
+      isAdmin: req.user.role === "admin" || req.user.role === "super_admin",
+      isSuperAdmin: req.user.role === "super_admin",
+      color: req.user.color,
+      presence: req.user.presence,
+      texture: req.user.texture,
+    },
+  });
+});
+
+// 3. Circles Management
+app.get("/api/circles", (_req: Request, res: Response) => {
   const list = Array.from(spaces.values()).map((s) => ({
     id: s.id,
     name: s.name,
@@ -395,29 +627,31 @@ app.get("/api/circles", (req: Request, res: Response) => {
   });
 });
 
-// 0.2 Create New Circle
-app.post("/api/circles", (req: Request, res: Response) => {
+app.post("/api/circles", (req: AuthRequest, res: Response) => {
   const { name, description, hostName, hostEmail, hostId } = req.body;
   if (!name) {
     return res.status(400).json({ error: "نام حلقه الزامی است" });
   }
 
-  const cleanEmail = (hostEmail || "").trim().toLowerCase();
+  const effectiveHostName = req.user?.name || hostName || "مدیر حلقه";
+  const effectiveHostEmail = req.user?.email || (hostEmail || "").trim().toLowerCase();
+  const effectiveHostId = req.user?.id || hostId || `host-${Date.now()}`;
   const circleId = `circle-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 
   const newSpace: SpaceState = {
     id: circleId,
     name: name.trim(),
-    description: description?.trim() || `حلقه اختصاصی ایجاد شده توسط ${hostName || "کاربر"}`,
-    hostName: hostName || "مدیر حلقه",
-    hostEmail: cleanEmail || undefined,
-    hostId: hostId || `host-${Date.now()}`,
+    description: description?.trim() || `حلقه اختصاصی ایجاد شده توسط ${effectiveHostName}`,
+    hostName: effectiveHostName,
+    hostEmail: effectiveHostEmail || undefined,
+    hostId: effectiveHostId,
     createdAt: Date.now(),
     participants: new Map(),
     signals: [],
   };
 
   spaces.set(circleId, newSpace);
+  saveSpacesToDisk();
 
   res.json({
     success: true,
@@ -434,8 +668,7 @@ app.post("/api/circles", (req: Request, res: Response) => {
   });
 });
 
-// 0.3 Delete Circle (by Host or SuperAdmin)
-app.delete("/api/circles/:spaceId", (req: Request, res: Response) => {
+app.delete("/api/circles/:spaceId", (req: AuthRequest, res: Response) => {
   const { spaceId } = req.params;
   const { requesterEmail, requesterId } = req.body;
 
@@ -448,21 +681,24 @@ app.delete("/api/circles/:spaceId", (req: Request, res: Response) => {
     return res.status(404).json({ error: "حلقه یافت نشد" });
   }
 
-  const isSuper = isSuperAdminEmail(requesterEmail);
-  const isOwner = space.hostId === requesterId || (space.hostEmail && space.hostEmail.toLowerCase() === (requesterEmail || "").toLowerCase());
+  const userEmail = req.user?.email || requesterEmail;
+  const userId = req.user?.id || requesterId;
+
+  const isSuper = req.user?.role === "super_admin" || isSuperAdminEmail(userEmail);
+  const isOwner = space.hostId === userId || (space.hostEmail && space.hostEmail.toLowerCase() === (userEmail || "").toLowerCase());
 
   if (!isSuper && !isOwner) {
     return res.status(403).json({ error: "فقط سازنده حلقه یا مدیر ارشد امکان حذف دارند" });
   }
 
-  // Notify connected clients
   broadcastToSpace(spaceId, "CIRCLE_DELETED", { spaceId });
   spaces.delete(spaceId);
+  saveSpacesToDisk();
 
   res.json({ success: true, message: "حلقه با موفقیت حذف شد" });
 });
 
-// 1. Get Space Details & Active Members
+// 4. Space Details & Join
 app.get("/api/spaces/:spaceId", (req: Request, res: Response) => {
   const { spaceId } = req.params;
   const space = spaces.get(spaceId);
@@ -490,7 +726,6 @@ app.get("/api/spaces/:spaceId", (req: Request, res: Response) => {
   });
 });
 
-// 2. Create or Join Space
 app.post("/api/spaces/:spaceId/join", (req: Request, res: Response) => {
   const { spaceId } = req.params;
   const { participant, spaceName, hostEmail, description } = req.body;
@@ -511,7 +746,6 @@ app.post("/api/spaces/:spaceId/join", (req: Request, res: Response) => {
     space.name = spaceName;
   }
 
-  // Calculate dynamic circular position around circle for new joiner
   const memberCount = space.participants.size;
   const angle = memberCount === 0 ? -1.57 : (memberCount * (2 * Math.PI / Math.max(memberCount + 1, 5))) - 1.57;
   const distance = 0.55;
@@ -528,8 +762,8 @@ app.post("/api/spaces/:spaceId/join", (req: Request, res: Response) => {
   };
 
   space.participants.set(participant.id, updatedParticipant);
+  saveSpacesToDisk();
 
-  // Broadcast join event
   broadcastToSpace(spaceId, "MEMBER_JOINED", {
     participant: updatedParticipant,
     participants: Array.from(space.participants.values()),
@@ -550,7 +784,7 @@ app.post("/api/spaces/:spaceId/join", (req: Request, res: Response) => {
   });
 });
 
-// 3. Heartbeat / Presence update
+// 5. Heartbeat & Presence
 app.post("/api/spaces/:spaceId/heartbeat", (req: Request, res: Response) => {
   const { spaceId } = req.params;
   const { userId, presence, bioSnippet } = req.body;
@@ -576,7 +810,7 @@ app.post("/api/spaces/:spaceId/heartbeat", (req: Request, res: Response) => {
   res.json({ success: true, count: space.participants.size });
 });
 
-// 4. Leave Space
+// 6. Leave Space
 app.post("/api/spaces/:spaceId/leave", (req: Request, res: Response) => {
   const { spaceId } = req.params;
   const { userId } = req.body;
@@ -585,6 +819,7 @@ app.post("/api/spaces/:spaceId/leave", (req: Request, res: Response) => {
   if (space && space.participants.has(userId)) {
     const left = space.participants.get(userId);
     space.participants.delete(userId);
+    saveSpacesToDisk();
     broadcastToSpace(spaceId, "MEMBER_LEFT", {
       userId,
       name: left?.name,
@@ -595,7 +830,7 @@ app.post("/api/spaces/:spaceId/leave", (req: Request, res: Response) => {
   res.json({ success: true });
 });
 
-// 5. Send Real-time Signal to Space
+// 7. Send Real-Time Non-Verbal Signal
 app.post("/api/spaces/:spaceId/signal", (req: Request, res: Response) => {
   const { spaceId } = req.params;
   const { signal } = req.body;
@@ -617,10 +852,11 @@ app.post("/api/spaces/:spaceId/signal", (req: Request, res: Response) => {
   if (space.signals.length > 50) {
     space.signals.shift();
   }
+  saveSpacesToDisk();
 
   broadcastToSpace(spaceId, "SIGNAL_RECEIVED", signalEvent);
 
-  // Trigger real-time background Web Push to Apple APNs / devices
+  // Trigger Web Push Notification
   const waveLabels: Record<string, { nameFa: string; emoji: string }> = {
     soft_wave: { nameFa: "موج نرم", emoji: "〰️" },
     double_pulse: { nameFa: "تپش دوگانه", emoji: "💓" },
@@ -633,17 +869,15 @@ app.post("/api/spaces/:spaceId/signal", (req: Request, res: Response) => {
   const waveInfo = waveLabels[signalEvent.wave] || { nameFa: "سیگنال نوری", emoji: "✨" };
   const intensityPct = Math.round((signalEvent.intensity || 0.6) * 100);
 
-  const signalDescription = signalEvent.symbolMeaning
-    ? `«${signalEvent.symbolMeaning}» • امضای ${waveInfo.nameFa} (${intensityPct}٪)`
-    : signalEvent.privateIntention
-    ? `«${signalEvent.privateIntention}» • امضای ${waveInfo.nameFa} (${intensityPct}٪)`
-    : `یک «${waveInfo.nameFa}» با شدت ${intensityPct}٪ برای شما فرستاد ${waveInfo.emoji}`;
-
   sendPushNotificationToSpace(
     spaceId,
     {
-      title: `${signalEvent.senderName} • ${waveInfo.nameFa} ${waveInfo.emoji}`,
-      body: signalDescription,
+      senderName: signalEvent.senderName,
+      waveName: waveInfo.nameFa,
+      waveEmoji: waveInfo.emoji,
+      intensityPct,
+      symbolMeaning: signalEvent.symbolMeaning,
+      privateIntention: signalEvent.privateIntention,
       data: {
         url: `/?space=${spaceId}`,
         spaceId,
@@ -660,13 +894,13 @@ app.post("/api/spaces/:spaceId/signal", (req: Request, res: Response) => {
   res.json({ success: true, signal: signalEvent });
 });
 
-// 6. Push Notifications Subscription Endpoints
+// 8. Push Subscription Endpoints
 app.get("/api/push/vapid-public-key", (_req: Request, res: Response) => {
   res.json({ publicKey: vapidKeys.publicKey });
 });
 
 app.post("/api/push/subscribe", (req: Request, res: Response) => {
-  const { spaceId, userId, subscription } = req.body;
+  const { spaceId, userId, subscription, privacyLevel } = req.body;
 
   if (!spaceId || !subscription || !subscription.endpoint || !subscription.keys) {
     return res.status(400).json({ error: "Invalid subscription payload" });
@@ -682,10 +916,11 @@ app.post("/api/push/subscribe", (req: Request, res: Response) => {
     keys: subscription.keys,
     userId: userId || "anonymous",
     spaceId,
+    privacyLevel: privacyLevel || "normal",
     createdAt: Date.now(),
   });
 
-  savePushSubscriptions();
+  savePushSubscriptionsToDisk();
   res.json({ success: true, count: spaceSubs.size });
 });
 
@@ -694,13 +929,12 @@ app.post("/api/push/unsubscribe", (req: Request, res: Response) => {
 
   if (spaceId && subscription?.endpoint && pushSubscriptions.has(spaceId)) {
     pushSubscriptions.get(spaceId)!.delete(subscription.endpoint);
-    savePushSubscriptions();
+    savePushSubscriptionsToDisk();
   }
 
   res.json({ success: true });
 });
 
-// 7. Send Immediate Test Notification to User's Device
 app.post("/api/push/test", async (req: Request, res: Response) => {
   const { subscription, name } = req.body;
 
@@ -710,8 +944,8 @@ app.post("/api/push/test", async (req: Request, res: Response) => {
 
   try {
     const payloadString = JSON.stringify({
-      title: "اتریا • تست اعلان آیفون",
-      body: `سلام ${name || "عزیز"}! نوتیفیکیشن در حالت خروج و صفحه قفل با موفقیت فعال شد ✨`,
+      title: "SKALA • تست اعلان آنی",
+      body: `سلام ${name || "همراه عزیز"}! اتصال نوتیفیکیشن موبایل با موفقیت فعال شد ✨`,
       icon: "/icon.svg",
       badge: "/icon.svg",
       data: { url: "/", test: true },
@@ -739,7 +973,7 @@ app.post("/api/push/test", async (req: Request, res: Response) => {
   }
 });
 
-// 8. Synchronous Co-Touch Real-Time Bridge Synchronization
+// 9. Synchronous Co-Touch Real-Time Bridge
 interface ActiveTouchInfo {
   userId: string;
   userName: string;
@@ -754,7 +988,7 @@ const activeCoTouches = new Map<string, Map<string, ActiveTouchInfo>>();
 
 app.post("/api/spaces/:spaceId/co-touch", (req: Request, res: Response) => {
   const { spaceId } = req.params;
-  const { action, touch } = req.body; // action: 'start' | 'move' | 'end'
+  const { action, touch } = req.body;
 
   if (!spaceId || !touch || !touch.userId) {
     return res.status(400).json({ error: "Invalid touch payload" });
@@ -775,7 +1009,6 @@ app.post("/api/spaces/:spaceId/co-touch", (req: Request, res: Response) => {
     });
   }
 
-  // Check if multiple users are touching simultaneously in this space
   const activeList = Array.from(spaceTouches.values()).filter(
     (t) => Date.now() - t.updatedAt < 2500
   );
@@ -789,9 +1022,7 @@ app.post("/api/spaces/:spaceId/co-touch", (req: Request, res: Response) => {
   res.json({ success: true, activeCount: activeList.length });
 });
 
-// 9. Custom Sensory Tap Loops Storage & Retrieval
-const sharedTapLoops = new Map<string, CustomTapLoop[]>();
-
+// 10. Custom Sensory Tap Loops Storage & Retrieval
 app.get("/api/spaces/:spaceId/tap-loops", (req: Request, res: Response) => {
   const { spaceId } = req.params;
   const loops = sharedTapLoops.get(spaceId) || [];
@@ -819,13 +1050,14 @@ app.post("/api/spaces/:spaceId/tap-loops", (req: Request, res: Response) => {
 
   list.unshift(newLoop);
   if (list.length > 40) list.pop();
+  saveTapLoopsToDisk();
 
   broadcastToSpace(spaceId, "TAP_LOOP_SAVED", { tapLoop: newLoop });
 
   res.json({ success: true, tapLoop: newLoop });
 });
 
-// 10. Server-Sent Events (SSE) for instant live streaming
+// 11. Server-Sent Events (SSE)
 app.get("/api/spaces/:spaceId/events", (req: Request, res: Response) => {
   const { spaceId } = req.params;
   const userId = (req.query.userId as string) || "anonymous";
@@ -842,7 +1074,6 @@ app.get("/api/spaces/:spaceId/events", (req: Request, res: Response) => {
   const client = { res, userId };
   sseClients.get(spaceId)!.add(client);
 
-  // Send initial handshake
   const space = spaces.get(spaceId);
   res.write(
     `data: ${JSON.stringify({
@@ -853,7 +1084,6 @@ app.get("/api/spaces/:spaceId/events", (req: Request, res: Response) => {
     })}\n\n`
   );
 
-  // Keep-alive ping every 15s to prevent connection drops
   const pingInterval = setInterval(() => {
     try {
       res.write(`data: ${JSON.stringify({ type: "PING", timestamp: Date.now() })}\n\n`);
@@ -874,12 +1104,18 @@ app.get("/api/spaces/:spaceId/events", (req: Request, res: Response) => {
   });
 });
 
-// Health check
+// 12. Health Check
 app.get("/api/health", (_req, res) => {
-  res.json({ status: "ok", activeSpaces: spaces.size });
+  res.json({
+    status: "ok",
+    product: "SKALA",
+    activeSpaces: spaces.size,
+    registeredUsers: users.size,
+    activeSessions: sessions.size,
+  });
 });
 
-// Vite middleware for development & Static serving for production
+// Vite & Static server
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
@@ -896,7 +1132,7 @@ async function startServer() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Aetheria server running on http://0.0.0.0:${PORT}`);
+    console.log(`SKALA server running on http://0.0.0.0:${PORT}`);
   });
 }
 

@@ -1,5 +1,5 @@
 /**
- * Ambient Procedural Audio Engine for Aetheria
+ * Ambient Procedural Audio Engine for SKALA
  * Generates organic, non-obtrusive resonant tones, harmonic breaths, and spatial pulses
  * using Web Audio API without external audio assets.
  */

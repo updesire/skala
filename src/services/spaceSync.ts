@@ -1,4 +1,5 @@
 import { Person, SignalData, UserIdentity, OrbColor, CircleGroup, CoTouchState, CustomTapLoop } from '../types';
+import { offlineQueue } from './offlineQueue';
 
 export type SpaceEventHandler = (event: {
   type: 'CONNECTED' | 'MEMBER_JOINED' | 'MEMBER_LEFT' | 'MEMBERS_UPDATED' | 'SIGNAL_RECEIVED' | 'PRESENCE_CHANGED' | 'CIRCLE_DELETED' | 'CO_TOUCH_EVENT' | 'TAP_LOOP_SAVED';
@@ -8,6 +9,7 @@ export type SpaceEventHandler = (event: {
 class SpaceSyncService {
   private currentSpaceId: string | null = null;
   private currentUserId: string | null = null;
+  private sessionToken: string | null = null;
   private eventSource: EventSource | null = null;
   private heartbeatInterval: any = null;
   private listeners: Set<SpaceEventHandler> = new Set();
@@ -15,15 +17,33 @@ class SpaceSyncService {
 
   constructor() {
     try {
-      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-        this.broadcastChannel = new BroadcastChannel('aetheria_space_channel');
-        this.broadcastChannel.onmessage = (event) => {
-          this.notifyListeners(event.data.type, event.data.data);
-        };
+      if (typeof window !== 'undefined') {
+        const savedToken = localStorage.getItem('skala_session_token');
+        if (savedToken) {
+          this.sessionToken = savedToken;
+        }
+        if ('BroadcastChannel' in window) {
+          this.broadcastChannel = new BroadcastChannel('skala_space_channel');
+          this.broadcastChannel.onmessage = (event) => {
+            this.notifyListeners(event.data.type, event.data.data);
+          };
+        }
       }
     } catch {
       // Ignore broadcast channel if unsupported
     }
+  }
+
+  public setSessionToken(token: string | null) {
+    this.sessionToken = token;
+  }
+
+  public getAuthHeaders(): Record<string, string> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (this.sessionToken) {
+      headers['Authorization'] = `Bearer ${this.sessionToken}`;
+    }
+    return headers;
   }
 
   public subscribe(handler: SpaceEventHandler): () => void {
@@ -53,6 +73,12 @@ class SpaceSyncService {
       const data = await res.json();
       if (!res.ok) {
         return { success: false, error: data.error || 'خطا در ثبت نام' };
+      }
+      if (data.sessionToken) {
+        this.sessionToken = data.sessionToken;
+        try {
+          localStorage.setItem('skala_session_token', data.sessionToken);
+        } catch {}
       }
       return { success: true, user: data.user };
     } catch (err: any) {
@@ -264,15 +290,33 @@ class SpaceSyncService {
       data: payload,
     });
 
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      offlineQueue.addPending({
+        spaceId: this.currentSpaceId,
+        signal: payload,
+      });
+      return true;
+    }
+
     try {
       const res = await fetch(`/api/spaces/${encodeURIComponent(this.currentSpaceId)}/signal`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.getAuthHeaders(),
         body: JSON.stringify({ signal: payload }),
       });
+      if (!res.ok) {
+        offlineQueue.addPending({
+          spaceId: this.currentSpaceId,
+          signal: payload,
+        });
+      }
       return res.ok;
     } catch {
-      return false;
+      offlineQueue.addPending({
+        spaceId: this.currentSpaceId,
+        signal: payload,
+      });
+      return true;
     }
   }
 

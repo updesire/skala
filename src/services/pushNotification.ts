@@ -178,7 +178,7 @@ export async function unsubscribeFromPush(
 }
 
 export async function showDirectLocalNotification(
-  title: string = 'Aetheria • اعلان آنی',
+  title: string = 'SKALA • اعلان حضور',
   body: string = 'سیگنال حضور و نوتیفیکیشن موبایل شما با موفقیت فعال شد ✨'
 ): Promise<{ success: boolean; error?: string }> {
   try {

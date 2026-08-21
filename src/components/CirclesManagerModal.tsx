@@ -67,7 +67,7 @@ export const CirclesManagerModal: React.FC<CirclesManagerModalProps> = ({
     const list = await spaceSync.fetchCircles();
     // Also load locally remembered circles from localStorage
     try {
-      const localCirclesRaw = localStorage.getItem('aetheria_saved_circles');
+      const localCirclesRaw = localStorage.getItem('skala_saved_circles') || localStorage.getItem('aetheria_saved_circles');
       const localCircles: CircleGroup[] = localCirclesRaw ? JSON.parse(localCirclesRaw) : [];
       const combined = [...list];
       for (const lc of localCircles) {
@@ -109,10 +109,10 @@ export const CirclesManagerModal: React.FC<CirclesManagerModalProps> = ({
       ambientAudio.playSignalResonance(0.8);
       // Save locally
       try {
-        const localCirclesRaw = localStorage.getItem('aetheria_saved_circles');
+        const localCirclesRaw = localStorage.getItem('skala_saved_circles') || localStorage.getItem('aetheria_saved_circles');
         const localCircles: CircleGroup[] = localCirclesRaw ? JSON.parse(localCirclesRaw) : [];
         localCircles.unshift(res.circle);
-        localStorage.setItem('aetheria_saved_circles', JSON.stringify(localCircles));
+        localStorage.setItem('skala_saved_circles', JSON.stringify(localCircles));
       } catch {}
 
       setActionMessage({
@@ -146,10 +146,10 @@ export const CirclesManagerModal: React.FC<CirclesManagerModalProps> = ({
     if (res.success) {
       ambientAudio.playRippleTone(300);
       try {
-        const localCirclesRaw = localStorage.getItem('aetheria_saved_circles');
+        const localCirclesRaw = localStorage.getItem('skala_saved_circles') || localStorage.getItem('aetheria_saved_circles');
         const localCircles: CircleGroup[] = localCirclesRaw ? JSON.parse(localCirclesRaw) : [];
         const filtered = localCircles.filter((c) => c.id !== circle.id);
-        localStorage.setItem('aetheria_saved_circles', JSON.stringify(filtered));
+        localStorage.setItem('skala_saved_circles', JSON.stringify(filtered));
       } catch {}
 
       setActionMessage({
@@ -160,7 +160,7 @@ export const CirclesManagerModal: React.FC<CirclesManagerModalProps> = ({
 
       if (currentSpaceId === circle.id) {
         // Fall back to master circle
-        onSwitchSpace('main-cosmic-circle', 'حلقه اصلی آتریا • Aetheria Sanctuary', isSuperAdmin);
+        onSwitchSpace('main-cosmic-circle', 'حلقه اصلی اسکالا • SKALA Sanctuary', isSuperAdmin);
       }
     } else {
       setActionMessage({

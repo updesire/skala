@@ -21,7 +21,7 @@ export const InvitedGuestJoinModal: React.FC<InvitedGuestJoinModalProps> = ({
 
   const [name, setName] = useState(() => {
     try {
-      const saved = localStorage.getItem('aetheria_user_identity');
+      const saved = localStorage.getItem('skala_user_identity') || localStorage.getItem('aetheria_user_identity');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed?.name && parsed.name !== 'You' && parsed.name !== 'شما') {
@@ -36,7 +36,7 @@ export const InvitedGuestJoinModal: React.FC<InvitedGuestJoinModalProps> = ({
 
   const [email, setEmail] = useState(() => {
     try {
-      const saved = localStorage.getItem('aetheria_user_identity');
+      const saved = localStorage.getItem('skala_user_identity') || localStorage.getItem('aetheria_user_identity');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed?.email) return parsed.email;
@@ -49,7 +49,7 @@ export const InvitedGuestJoinModal: React.FC<InvitedGuestJoinModalProps> = ({
 
   const [selectedColor, setSelectedColor] = useState<OrbColor>(() => {
     try {
-      const saved = localStorage.getItem('aetheria_user_identity');
+      const saved = localStorage.getItem('skala_user_identity') || localStorage.getItem('aetheria_user_identity');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed?.color) return parsed.color;
